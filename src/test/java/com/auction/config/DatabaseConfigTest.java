@@ -4,7 +4,6 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DatabaseConfigTest {
 
     private static Jdbi jdbi;
@@ -15,7 +14,6 @@ class DatabaseConfigTest {
     }
 
     @Test
-    @Order(1)
     @DisplayName("Database connection should work")
     void testConnection() {
         assertDoesNotThrow(() -> {
@@ -29,17 +27,21 @@ class DatabaseConfigTest {
     }
 
     @Test
-    @Order(2)
     @DisplayName("Should have 5 tables")
     void testTableCount() {
-        int count = jdbi.withHandle(handle ->
+        // In ra danh sách các bảng để debug
+        System.out.println("=== Danh sách bảng trong database ===");
+        var tables = jdbi.withHandle(handle ->
             handle.createQuery(
-                "SELECT COUNT(*) FROM information_schema.tables " +
+                "SELECT table_name FROM information_schema.tables " +
                 "WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
-            )
-            .mapTo(Integer.class)
-            .one()
+            ).mapTo(String.class).list()
         );
-        assertEquals(5, count, "Should have 5 tables");
+        
+        System.out.println("Số bảng tìm thấy: " + tables.size());
+        tables.forEach(table -> System.out.println("  - " + table));
+        
+        assertEquals(5, tables.size(), 
+            "Cần có 5 bảng, nhưng tìm thấy " + tables.size() + " bảng: " + tables);
     }
 }
