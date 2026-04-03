@@ -1,7 +1,11 @@
 package com.auction.middleware;
 
-import com.auction.exception.UnauthorizedException;
+import com.auction.config.JwtUtil;
+import com.auth0.jwt.exceptions.JWTVerificationException;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import io.javalin.http.Context;
+import io.javalin.http.UnauthorizedResponse;
+
 import java.util.List;
 
 public class JwtMiddleware {
@@ -22,21 +26,20 @@ public class JwtMiddleware {
         String authHeader = ctx.header("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện chức năng này (Thiếu Bearer Token).");
+            throw new UnauthorizedResponse("Missing or invalid Authorization header");
         }
 
         String token = authHeader.substring(7);
 
         try {
-            if ("fake-invalid-token".equals(token)) {
-                throw new Exception("Token hết hạn");
-            }
+            DecodedJWT decoded = JwtUtil.verifyToken(token);
 
-            String usernameFromToken = "mock_user";
-            ctx.attribute("currentUser", usernameFromToken);
+            ctx.attribute("userId", decoded.getClaim("userId").asLong());
+            ctx.attribute("username", decoded.getSubject());
+            ctx.attribute("role", decoded.getClaim("role").asString());
 
-        } catch (Exception e) {
-            throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn!");
+        } catch (JWTVerificationException e) {
+            throw new UnauthorizedResponse("Invalid or expired token");
         }
     }
 }

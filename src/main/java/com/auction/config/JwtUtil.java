@@ -10,22 +10,30 @@ import java.util.Date;
 
 public class JwtUtil {
 
-    private static final String SECRET = "your-secret-key-change-in-production";
+    private static final String SECRET;
+
+    static {
+        String envSecret = System.getenv("JWT_SECRET");
+        SECRET = (envSecret != null && !envSecret.isEmpty())
+            ? envSecret
+            : "auction-secret-key-dev";
+    }
+
     private static final Algorithm ALGORITHM = Algorithm.HMAC256(SECRET);
     private static final long EXPIRATION_MS = 24 * 60 * 60 * 1000;
     private static final JWTVerifier VERIFIER = JWT.require(ALGORITHM).build();
 
-    public static String generateToken(String username, String role, Long userId) {
+    public static String createToken(Long userId, String username, String role) {
         return JWT.create()
             .withSubject(username)
-            .withClaim("role", role)
             .withClaim("userId", userId)
+            .withClaim("role", role)
             .withIssuedAt(new Date())
             .withExpiresAt(new Date(System.currentTimeMillis() + EXPIRATION_MS))
             .sign(ALGORITHM);
     }
 
-    public static DecodedJWT validateToken(String token) throws JWTVerificationException {
+    public static DecodedJWT verifyToken(String token) throws JWTVerificationException {
         return VERIFIER.verify(token);
     }
 }
