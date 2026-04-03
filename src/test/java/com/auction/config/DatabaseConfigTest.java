@@ -12,14 +12,28 @@ class DatabaseConfigTest {
 
     @BeforeAll
     static void setup() {
-        // Khởi tạo connection
+        // Khởi tạo connection duy nhất cho toàn bộ class test
         jdbi = DatabaseConfig.create();
     }
 
     @AfterAll
     static void tearDown() {
-        // Đóng connection pool sau khi tất cả các test đã chạy xong
+        // Đóng connection pool sau khi tất cả các test đã chạy xong để giải phóng tài nguyên
         DatabaseConfig.shutDown();
+    }
+
+    @BeforeEach
+    void cleanDatabase() {
+        // Xóa sạch dữ liệu và Reset ID về 1 trước mỗi bài test để tránh xung đột dữ liệu cũ
+        jdbi.useHandle(handle -> {
+            // Sử dụng CASCADE để tự động xóa các bản ghi liên quan ở bảng con
+            handle.execute("TRUNCATE TABLE auto_bid_configs CASCADE");
+            handle.execute("TRUNCATE TABLE bid_transactions CASCADE");
+            handle.execute("TRUNCATE TABLE auctions CASCADE");
+            handle.execute("TRUNCATE TABLE items CASCADE");
+            // RESTART IDENTITY đưa giá trị BIGSERIAL quay lại số 1
+            handle.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE");
+        });
     }
 
     @Test
@@ -52,7 +66,8 @@ class DatabaseConfigTest {
         System.out.println("Số bảng trong schema public: " + tables.size());
         tables.forEach(table -> System.out.println("  - " + table));
         
-        assertTrue(tables.size() >= 5, "Cần có ít nhất 5 bảng.");
+        // Kiểm tra xem database đã được init schema thành công chưa
+        assertTrue(tables.size() >= 5, "Cần có ít nhất 5 bảng sau khi chạy migration.");
     }
 
     @Test
@@ -85,6 +100,6 @@ class DatabaseConfigTest {
                 .filter(existingTables::contains)
                 .count();
         
-        assertEquals(5, foundCount, "Phải tìm thấy đủ 5 bảng bắt buộc.");
+        assertEquals(5, foundCount, "Phải tìm thấy đủ 5 bảng bắt buộc: users, items, auctions, bid_transactions, auto_bid_configs.");
     }
 }
