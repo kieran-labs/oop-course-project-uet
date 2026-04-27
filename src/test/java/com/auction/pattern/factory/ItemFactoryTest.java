@@ -11,7 +11,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class ItemFactoryTest {
 
-    private final Long SELLER_ID = 1L;
+    // Đã sửa SELLER_ID thành sellerId để qua ải Checkstyle
+    private final Long sellerId = 1L;
 
     @Test
     void testCreateElectronics() {
@@ -21,11 +22,10 @@ public class ItemFactoryTest {
         req.setCategory("ELECTRONICS");
         req.setCategoryDetail("Apple");
 
-        // Đã sửa: Tách cái hộp req ra thành 5 tham số rời rạc để chiều ý Dev C
         Item item = ItemFactory.create(
                 req.getName(),
                 req.getDescription(),
-                SELLER_ID,
+                sellerId,
                 req.getCategory(),
                 req.getCategoryDetail()
         );
@@ -40,14 +40,14 @@ public class ItemFactoryTest {
     void testCreateArt() {
         CreateItemRequest req = new CreateItemRequest();
         req.setName("Mona Lisa Replica");
-        req.setDescription("Bản sao chép chuẩn"); // Thêm mô tả cho khỏi bị lỗi null
+        req.setDescription("Bản sao chép chuẩn"); 
         req.setCategory("ART");
         req.setCategoryDetail("Leonardo da Vinci");
 
         Item item = ItemFactory.create(
                 req.getName(),
                 req.getDescription(),
-                SELLER_ID,
+                sellerId,
                 req.getCategory(),
                 req.getCategoryDetail()
         );
@@ -68,7 +68,7 @@ public class ItemFactoryTest {
         Item item = ItemFactory.create(
                 req.getName(),
                 req.getDescription(),
-                SELLER_ID,
+                sellerId,
                 req.getCategory(),
                 req.getCategoryDetail()
         );
@@ -89,7 +89,7 @@ public class ItemFactoryTest {
             ItemFactory.create(
                     req.getName(),
                     req.getDescription(),
-                    SELLER_ID,
+                    sellerId,
                     req.getCategory(),
                     req.getCategoryDetail()
             );
