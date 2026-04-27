@@ -15,17 +15,21 @@ public class ItemFactoryTest {
 
     @Test
     void testCreateElectronics() {
-        // Chuẩn bị đầu vào
         CreateItemRequest req = new CreateItemRequest();
         req.setName("iPhone 15");
         req.setDescription("Mới 99%");
         req.setCategory("ELECTRONICS");
-        req.setCategoryDetail("Apple"); // categoryDetail của Electronics là brand
+        req.setCategoryDetail("Apple");
 
-        // Hành động
-        Item item = ItemFactory.create(req, SELLER_ID);
+        // Đã sửa: Tách cái hộp req ra thành 5 tham số rời rạc để chiều ý Dev C
+        Item item = ItemFactory.create(
+                req.getName(),
+                req.getDescription(),
+                SELLER_ID,
+                req.getCategory(),
+                req.getCategoryDetail()
+        );
 
-        // Kiểm tra
         assertNotNull(item);
         assertTrue(item instanceof Electronics, "Phải tạo ra đối tượng Electronics");
         Electronics electronics = (Electronics) item;
@@ -36,10 +40,17 @@ public class ItemFactoryTest {
     void testCreateArt() {
         CreateItemRequest req = new CreateItemRequest();
         req.setName("Mona Lisa Replica");
+        req.setDescription("Bản sao chép chuẩn"); // Thêm mô tả cho khỏi bị lỗi null
         req.setCategory("ART");
-        req.setCategoryDetail("Leonardo da Vinci"); // artist
+        req.setCategoryDetail("Leonardo da Vinci");
 
-        Item item = ItemFactory.create(req, SELLER_ID);
+        Item item = ItemFactory.create(
+                req.getName(),
+                req.getDescription(),
+                SELLER_ID,
+                req.getCategory(),
+                req.getCategoryDetail()
+        );
 
         assertTrue(item instanceof Art, "Phải tạo ra đối tượng Art");
         Art art = (Art) item;
@@ -50,10 +61,17 @@ public class ItemFactoryTest {
     void testCreateVehicle() {
         CreateItemRequest req = new CreateItemRequest();
         req.setName("Toyota Camry");
+        req.setDescription("Xe lướt chạy lướt sóng");
         req.setCategory("VEHICLE");
-        req.setCategoryDetail("2024"); // year
+        req.setCategoryDetail("2024");
 
-        Item item = ItemFactory.create(req, SELLER_ID);
+        Item item = ItemFactory.create(
+                req.getName(),
+                req.getDescription(),
+                SELLER_ID,
+                req.getCategory(),
+                req.getCategoryDetail()
+        );
 
         assertTrue(item instanceof Vehicle, "Phải tạo ra đối tượng Vehicle");
         Vehicle vehicle = (Vehicle) item;
@@ -63,11 +81,18 @@ public class ItemFactoryTest {
     @Test
     void testInvalidCategory() {
         CreateItemRequest req = new CreateItemRequest();
-        req.setCategory("FURNITURE"); // Một hạng mục không tồn tại
+        req.setName("Bàn ghế");
+        req.setDescription("Gỗ lim xịn");
+        req.setCategory("FURNITURE"); 
 
-        // Kiểm tra xem hệ thống có bắt lỗi và ném ra IllegalArgumentException không
         Exception exception = assertThrows(IllegalArgumentException.class, () -> {
-            ItemFactory.create(req, SELLER_ID);
+            ItemFactory.create(
+                    req.getName(),
+                    req.getDescription(),
+                    SELLER_ID,
+                    req.getCategory(),
+                    req.getCategoryDetail()
+            );
         });
         
         assertNotNull(exception);
