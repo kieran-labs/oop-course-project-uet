@@ -12,12 +12,12 @@ public class JwtUtil {
   private static final String SECRET_KEY =
       System.getenv("JWT_SECRET") != null ? System.getenv("JWT_SECRET") : "auction-secret-key-dev";
 
-  private static final Algorithm algorithm =
+  private static final Algorithm ALGORITHM =
       Algorithm.HMAC256(
           SECRET_KEY); // Đây là thuật toán mã hóa đối xứng. Nghĩa là hệ thống dùng chung 1 cái
   // SECRET_KEY vừa để "khóa" (tạo token) vừa để "mở khóa" (xác minh token).
-  private static final JWTVerifier verifier =
-      JWT.require(algorithm)
+  private static final JWTVerifier VERIFIER =
+      JWT.require(ALGORITHM)
           .build(); // Đây là cái "Máy quét thẻ". Thầy để nó là static final (biến tĩnh hằng số) để
 
   // máy tính chỉ khởi tạo nó đúng 1 lần duy nhất khi chạy server, giúp tiết kiệm
@@ -29,11 +29,11 @@ public class JwtUtil {
         .withClaim("username", username)
         .withClaim("role", role)
         .withExpiresAt(Instant.now().plus(24, ChronoUnit.HOURS))
-        .sign(algorithm);
+        .sign(ALGORITHM);
   }
 
   public static DecodedJWT verifyToken(String token) {
     // Hàm này sẽ tự động quăng lỗi của thư viện JWT nếu token hết hạn hoặc sai chữ ký
-    return verifier.verify(token);
+    return VERIFIER.verify(token);
   }
 }

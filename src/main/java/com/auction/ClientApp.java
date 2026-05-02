@@ -7,28 +7,27 @@ import javafx.stage.Stage;
 /**
  * Entry point của ứng dụng JavaFX client.
  *
- * Khởi tạo SceneManager (Singleton) rồi navigate đến màn login.
- * Từ đây trở đi, mọi chuyển màn đều qua:
- *   SceneManager.getInstance().navigateTo("ten.fxml");
+ * <p>Khởi tạo SceneManager (Singleton) rồi navigate đến màn login. Từ đây trở đi, mọi chuyển màn
+ * đều qua: SceneManager.getInstance().navigateTo("ten.fxml");
  */
 public class ClientApp extends Application {
 
-    @Override
-    public void start(Stage primaryStage) {
-        // Khởi tạo SceneManager — chỉ gọi 1 lần duy nhất ở đây
-        SceneManager.init(primaryStage, 1200, 800);
+  @Override
+  public void start(Stage primaryStage) {
+    // Khởi tạo SceneManager — chỉ gọi 1 lần duy nhất ở đây
+    SceneManager.init(primaryStage, 1200, 800);
 
-        primaryStage.setTitle("Online Auction System");
-        primaryStage.setMinWidth(900);
-        primaryStage.setMinHeight(600);
+    primaryStage.setTitle("Online Auction System");
+    primaryStage.setMinWidth(900);
+    primaryStage.setMinHeight(600);
 
-        // Navigate đến màn đăng nhập (lazy load lần đầu)
-        SceneManager.getInstance().navigateTo("welcome.fxml");
+    // Navigate đến màn đăng nhập (lazy load lần đầu)
+    SceneManager.getInstance().navigateTo("welcome.fxml");
 
-        primaryStage.show();
-    }
+    primaryStage.show();
+  }
 
-    public static void main(String[] args) {
-        launch(args);
-    }
+  public static void main(String[] args) {
+    launch(args);
+  }
 }

@@ -57,7 +57,13 @@ public class UserService {
 
   public String login(LoginRequest req) {
     // 1. Tìm user
-    User user = userDao.findByUsername(req.getUsername());
+    User user =
+        userDao
+            .findByUsername(req.getUsername())
+            .orElseThrow(
+                () -> new NotFoundException("Không tìm thấy người dùng với username này!"));
+    // Giải thích: Lệnh này bảo Java rằng: "Hãy lấy User trong hộp ra. Nếu hộp rỗng, lập tức ném ra
+    // lỗi NotFoundException".//
     if (user == null) {
       throw new NotFoundException("Không tìm thấy tài khoản với username này.");
     }
