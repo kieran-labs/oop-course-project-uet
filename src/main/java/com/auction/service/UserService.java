@@ -82,4 +82,18 @@ public class UserService {
     // 3. Trả về Token
     return JwtUtil.createToken(user.getId(), user.getUsername(), user.getRole());
   }
+
+  /**
+   * Lấy role của user theo username — dùng sau đăng nhập để trả về cho client.
+   *
+   * @param username tên đăng nhập
+   * @return role: "BIDDER", "SELLER", hoặc "ADMIN"
+   * @throws NotFoundException nếu username không tồn tại
+   */
+  public String getRoleByUsername(String username) {
+    return userDao
+        .findByUsername(username)
+        .map(User::getRole)
+        .orElseThrow(() -> new NotFoundException("Không tìm thấy user: " + username));
+  }
 }
