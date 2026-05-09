@@ -25,7 +25,7 @@ public class UnauthorizedException extends AuctionException {
   private static final long serialVersionUID = 1L;
 
   /**
-   * Constructs a new UnauthorizedException with the specified message.
+   * Constructs a new UnauthorizedException with the specified message
    *
    * @param message description of the permission violation
    */
@@ -34,7 +34,7 @@ public class UnauthorizedException extends AuctionException {
   }
 
   /**
-   * Constructs a new UnauthorizedException with the specified message and cause.
+   * Constructs a new UnauthorizedException with the specified message and cause
    *
    * @param message description of the permission violation
    * @param cause the underlying exception
