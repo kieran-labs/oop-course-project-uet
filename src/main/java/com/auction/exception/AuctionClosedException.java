@@ -1,10 +1,10 @@
 package com.auction.exception;
 
 /**
- * Thrown when an operation is attempted on an auction that is not in the {@code RUNNING} state.
+ * Thrown when an operation is attempted on an auction that is not in the {@code RUNNING} state
  *
  * <p>This includes auctions that are {@code OPEN} (not yet started), {@code FINISHED} (already
- * ended), {@code CANCELED}, or {@code PAID}.
+ * ended), {@code CANCELED}, or {@code PAID}
  *
  * <p>Typical usage:
  *
@@ -22,7 +22,7 @@ public class AuctionClosedException extends AuctionException {
   private static final long serialVersionUID = 1L;
 
   /**
-   * Constructs a new AuctionClosedException with the specified message.
+   * Constructs a new AuctionClosedException with the specified message
    *
    * @param message description of the auction state and the attempted operation
    */
@@ -31,7 +31,7 @@ public class AuctionClosedException extends AuctionException {
   }
 
   /**
-   * Constructs a new AuctionClosedException with the specified message and cause.
+   * Constructs a new AuctionClosedException with the specified message and cause
    *
    * @param message description of the auction state and the attempted operation
    * @param cause the underlying exception
