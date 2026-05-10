@@ -71,3 +71,6 @@ gradle.properties
 # repowise API keys (local)
 .repowise/.env
 *.zip
+
+# Ignore Node.js dependencies (for commit chart script)
+node_modules/
