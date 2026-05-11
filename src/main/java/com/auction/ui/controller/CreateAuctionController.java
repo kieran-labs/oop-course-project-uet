@@ -231,6 +231,13 @@ public class CreateAuctionController implements Navigable {
 
   // ========== PRIVATE HELPERS ==========
 
+  /**
+   * Hiển thị thông báo kết quả trên statusLabel, áp dụng CSS class tương ứng.
+   *
+   * @param msg nội dung thông báo
+   * @param isError {@code true} → class {@code error-label} (đỏ); {@code false} → {@code
+   *     status-label} (xanh)
+   */
   private void showStatus(String msg, boolean isError) {
     statusLabel.setText(msg);
     statusLabel.setStyle("");
@@ -239,6 +246,7 @@ public class CreateAuctionController implements Navigable {
     statusLabel.setManaged(true);
   }
 
+  /** Ẩn statusLabel, giải phóng layout space và reset về CSS class mặc định. */
   private void hideStatus() {
     statusLabel.setVisible(false);
     statusLabel.setManaged(false);
@@ -246,6 +254,10 @@ public class CreateAuctionController implements Navigable {
     statusLabel.getStyleClass().setAll("status-label");
   }
 
+  /**
+   * Xóa trắng toàn bộ form và reset trạng thái nút tạo phiên. Gọi trong {@link #onNavigatedTo()} để
+   * đảm bảo form sạch mỗi lần vào màn hình.
+   */
   private void clearForm() {
     if (itemCombo != null) {
       itemCombo.setValue(null);
@@ -271,6 +283,10 @@ public class CreateAuctionController implements Navigable {
     }
   }
 
+  /**
+   * Trích xuất trường {@code message} từ JSON body phản hồi lỗi của server. Trả về {@code fallback}
+   * nếu body không hợp lệ.
+   */
   private String extractMessage(String body, String fallback) {
     try {
       return MAPPER.readTree(body).path("message").asText(fallback);
