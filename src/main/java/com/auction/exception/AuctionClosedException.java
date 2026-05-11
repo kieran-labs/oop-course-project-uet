@@ -1,12 +1,12 @@
 package com.auction.exception;
 
 /**
- * Thrown when an operation is attempted on an auction that is not in the {@code RUNNING} state
+ * Thrown khi thao tác được thực hiện trên một phiên đấu giá không ở trạng thái {@code RUNNING}.
  *
- * <p>This includes auctions that are {@code OPEN} (not yet started), {@code FINISHED} (already
- * ended), {@code CANCELED}, or {@code PAID}
+ * <p>Bao gồm các phiên đang ở trạng thái {@code OPEN} (chưa bắt đầu), {@code FINISHED} (đã kết
+ * thúc), {@code CANCELED}, hoặc {@code PAID}.
  *
- * <p>Typical usage:
+ * <p>Cách dùng điển hình:
  *
  * <pre>{@code
  * if (!"RUNNING".equals(auction.getStatus())) {
@@ -22,19 +22,19 @@ public class AuctionClosedException extends AuctionException {
   private static final long serialVersionUID = 1L;
 
   /**
-   * Constructs a new AuctionClosedException with the specified message
+   * Khởi tạo AuctionClosedException với message mô tả trạng thái phiên và thao tác bị từ chối.
    *
-   * @param message description of the auction state and the attempted operation
+   * @param message mô tả trạng thái phiên và thao tác bị từ chối
    */
   public AuctionClosedException(String message) {
     super(message);
   }
 
   /**
-   * Constructs a new AuctionClosedException with the specified message and cause
+   * Khởi tạo AuctionClosedException với message và nguyên nhân gốc.
    *
-   * @param message description of the auction state and the attempted operation
-   * @param cause the underlying exception
+   * @param message mô tả trạng thái phiên và thao tác bị từ chối
+   * @param cause exception gốc dẫn đến lỗi này
    */
   public AuctionClosedException(String message, Throwable cause) {
     super(message, cause);
