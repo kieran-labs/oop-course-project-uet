@@ -89,30 +89,25 @@ graph TB
         RC["RestClient\n+ JWT header"]
         WSC["WebSocketClient\n+ Platform.runLater()"]
         UTIL["SceneManager · NotificationStore\nBackgroundBidWatcher · Navigable"]
-
-        FXML <--> CTRL
+        FXML  CTRL
         CTRL --- RC
         CTRL --- WSC
         CTRL --- UTIL
     end
-
     RC -->|"HTTP REST\n(JSON + Bearer token)"| JWT
-    WSC <-->|"WebSocket\n/ws/auction/{id}?token=..."| WSH
-
+    WSC |"WebSocket\n/ws/auction/{id}?token=..."| WSH
     subgraph SERVER["⚙️  SERVER — Javalin"]
         direction TB
         JWT["JWT Middleware\nverify every /api/* request"]
         REST["REST Controllers\nAuth · Auction · Bid · Item"]
         WSH["AuctionWebSocketHandler\nObserver Manager"]
-        SVC["Service Layer\nBidService · AuctionService · UserService\nItemService · AuctionScheduler · PasswordResetService"]
-        DAO["DAO Layer — JDBI 3\n7 DAOs · SELECT FOR UPDATE in AuctionDao"]
-
+        SVC["Service Layer\nBidService · AuctionService\nUserService · ItemService\nAuctionScheduler · PasswordResetService"]
+        DAO["DAO Layer — JDBI 3\n7 DAOs · SELECT FOR UPDATE\nin AuctionDao"]
         JWT --> REST
         REST --> SVC
         WSH --> SVC
         SVC --> DAO
     end
-
     DAO -->|"SQL via HikariCP pool"| DB[("PostgreSQL\nEmbedded\n8 tables · 6 migrations")]
 ```
 
