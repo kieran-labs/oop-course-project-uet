@@ -91,6 +91,10 @@ public class ForgotPasswordController implements Navigable {
     SceneManager.getInstance().navigateBack("login.fxml");
   }
 
+  /**
+   * Trích xuất trường {@code message} từ JSON body phản hồi của server. Trả về {@code fallback} nếu
+   * body rỗng hoặc không phải JSON hợp lệ.
+   */
   private String extractMessage(String responseBody, String fallback) {
     try {
       JsonNode json = MAPPER.readTree(responseBody);
@@ -100,6 +104,12 @@ public class ForgotPasswordController implements Navigable {
     }
   }
 
+  /**
+   * Hiển thị kết quả gửi yêu cầu trên statusLabel.
+   *
+   * @param msg nội dung thông báo
+   * @param isError {@code true} để hiển thị màu đỏ (lỗi), {@code false} cho màu xanh (thành công)
+   */
   private void showStatus(String msg, boolean isError) {
     statusLabel.setText(msg);
     statusLabel.setStyle(isError ? "-fx-text-fill: #e53935;" : "-fx-text-fill: #43a047;");
@@ -107,6 +117,7 @@ public class ForgotPasswordController implements Navigable {
     statusLabel.setManaged(true);
   }
 
+  /** Ẩn statusLabel và giải phóng layout space. */
   private void hideStatus() {
     if (statusLabel != null) {
       statusLabel.setVisible(false);
