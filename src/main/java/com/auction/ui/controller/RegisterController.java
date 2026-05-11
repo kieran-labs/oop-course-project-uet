@@ -142,7 +142,7 @@ public class RegisterController implements Navigable {
             });
   }
 
-  /** Quay lại màn hình đăng nhập. */
+  /** Quay lại màn hình đăng nhập (người dùng đã có tài khoản). */
   @FXML
   public void goToLogin() {
     SceneManager.getInstance().navigateTo("login.fxml");
@@ -150,7 +150,10 @@ public class RegisterController implements Navigable {
 
   // ========== PRIVATE HELPERS ==========
 
-  /** Lưu session và điều hướng sau khi đăng ký thành công. */
+  /**
+   * Lưu JWT token, username, role và userId vào SceneManager, khởi động WebSocket số dư (nếu không
+   * phải ADMIN), rồi điều hướng đến danh sách phiên đấu giá.
+   */
   private void onRegisterSuccess(String token, String role, String username, long userId) {
     SceneManager sm = SceneManager.getInstance();
     sm.setJwtToken(token);
@@ -168,17 +171,23 @@ public class RegisterController implements Navigable {
     sm.navigateTo("auction-list.fxml");
   }
 
+  /** Hiển thị thông báo lỗi đăng ký trên errorLabel. */
   private void showError(String message) {
     errorLabel.setText(message);
     errorLabel.setVisible(true);
     errorLabel.setManaged(true);
   }
 
+  /** Ẩn errorLabel và giải phóng layout space. */
   private void hideError() {
     errorLabel.setVisible(false);
     errorLabel.setManaged(false);
   }
 
+  /**
+   * Xóa trắng toàn bộ form (username, email, password, confirmPassword, role) và reset trạng thái
+   * nút đăng ký. Gọi trong {@link #onNavigatedTo()}.
+   */
   private void clearForm() {
     if (usernameField != null) {
       usernameField.clear();
