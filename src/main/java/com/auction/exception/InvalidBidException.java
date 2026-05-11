@@ -1,16 +1,16 @@
 package com.auction.exception;
 
 /**
- * Thrown when a bid violates business rules:
+ * Thrown khi một bid vi phạm business rule, ví dụ:
  *
  * <ul>
- *   <li>Amount is non-positive (≤ 0)
- *   <li>Amount is lower than or equal to current price
- *   <li>Bidder is the seller of the item (self-bidding)
- *   <li>Bid increment is below the minimum allowed
+ *   <li>Giá bid không dương (≤ 0)
+ *   <li>Giá bid thấp hơn hoặc bằng giá hiện tại
+ *   <li>Người bid là seller của chính item đó (self-bidding)
+ *   <li>Mức tăng bid thấp hơn mức tối thiểu cho phép
  * </ul>
  *
- * <p>Typical usage:
+ * <p>Cách dùng điển hình:
  *
  * <pre>{@code
  * if (amount.compareTo(auction.getCurrentPrice()) <= 0) {
@@ -26,19 +26,19 @@ public class InvalidBidException extends AuctionException {
   private static final long serialVersionUID = 1L;
 
   /**
-   * Constructs a new InvalidBidException with the specified message
+   * Khởi tạo InvalidBidException với message mô tả lý do bid không hợp lệ.
    *
-   * @param message description of why the bid is invalid
+   * @param message mô tả lý do bid không hợp lệ
    */
   public InvalidBidException(String message) {
     super(message);
   }
 
   /**
-   * Constructs a new InvalidBidException with the specified message and cause
+   * Khởi tạo InvalidBidException với message và nguyên nhân gốc.
    *
-   * @param message description of why the bid is invalid
-   * @param cause the underlying exception
+   * @param message mô tả lý do bid không hợp lệ
+   * @param cause exception gốc dẫn đến lỗi này
    */
   public InvalidBidException(String message, Throwable cause) {
     super(message, cause);
