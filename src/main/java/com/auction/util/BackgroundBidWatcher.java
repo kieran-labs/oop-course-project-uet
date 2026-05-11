@@ -11,16 +11,47 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Singleton theo dõi bid trong nền cho các phiên đấu giá mà user đã đặt giá nhưng đã rời màn hình
- * chi tiết.
+ * Singleton theo dõi realtime các phiên đấu giá trong nền, dành cho trường hợp user đã đặt giá
+ * nhưng đã rời khỏi màn hình chi tiết ({@code AuctionDetailController}).
  *
- * <p>Khi user rời {@code AuctionDetailController} mà vẫn còn bid, controller gọi {@link
- * #watch(Long, String, String, Long)} để đăng ký. BackgroundBidWatcher mở kết nối WebSocket riêng
- * cho phiên đó và đẩy thông báo qua {@link NotificationStore} khi có cập nhật.
+ * <h2>Vấn đề giải quyết</h2>
  *
- * <p>Khi user quay lại màn hình chi tiết của phiên đó, {@link #stopWatching(Long)} được gọi để
- * tránh nhận event trùng với kết nối WebSocket của controller. {@link #stopAll()} được gọi khi đăng
- * xuất.
+ * Khi user đang xem {@code auction-detail.fxml}, controller đó tự quản lý kết nối WebSocket và hiển
+ * thị cập nhật trực tiếp. Tuy nhiên khi user điều hướng sang màn hình khác, kết nối đó bị đóng
+ * ({@code onNavigatedFrom}), và user không còn nhận được thông báo về các phiên mình đang đặt giá
+ * nữa.
+ *
+ * <p>{@code BackgroundBidWatcher} giải quyết vấn đề này bằng cách duy trì kết nối WebSocket riêng
+ * cho mỗi phiên đấu giá mà user đang tham gia, ngay cả khi user không ở màn hình đó.
+ *
+ * <h2>Luồng hoạt động</h2>
+ *
+ * <ol>
+ *   <li>User đặt giá tại {@code AuctionDetailController} → khi rời màn hình, controller gọi {@link
+ *       #watch(Long, String, String, Long)} để đăng ký theo dõi nền.
+ *   <li>{@code BackgroundBidWatcher} mở một {@link WebSocketClient} riêng cho phiên đó và parse các
+ *       message nhận được.
+ *   <li>Khi có sự kiện liên quan (bị vượt giá, auto-bid kích hoạt, phiên kết thúc), một thông báo
+ *       được đẩy vào {@link NotificationStore} qua {@code Platform.runLater()}.
+ *   <li>Khi user quay lại màn hình chi tiết của phiên đó, {@code AuctionDetailController} gọi
+ *       {@link #stopWatching(Long)} để tránh nhận event trùng với kết nối mới của controller.
+ *   <li>Khi user đăng xuất, {@link com.auction.ui.util.SceneManager#logout()} gọi {@link
+ *       #stopAll()} để đóng tất cả kết nối nền.
+ * </ol>
+ *
+ * <h2>Các sự kiện được xử lý</h2>
+ *
+ * <ul>
+ *   <li>{@code BID_UPDATE}: thông báo khi người khác vượt giá của user.
+ *   <li>{@code AUTO_BID_TRIGGERED}: thông báo khi hệ thống đặt auto-bid thành công cho user.
+ *   <li>{@code AUCTION_ENDED}: thông báo khi phiên kết thúc, kèm tên người thắng. Watcher tự dừng
+ *       sau sự kiện này.
+ *   <li>Các type khác (ví dụ: {@code TIME_EXTENDED}): bỏ qua.
+ * </ul>
+ *
+ * @see WebSocketClient
+ * @see NotificationStore
+ * @see com.auction.ui.util.SceneManager#logout()
  */
 public class BackgroundBidWatcher {
 
@@ -29,11 +60,27 @@ public class BackgroundBidWatcher {
   private static final ObjectMapper MAPPER =
       new ObjectMapper().registerModule(new JavaTimeModule());
 
-  /** Map auctionId → WebSocketClient đang watch. */
+  /**
+   * Map lưu các watcher đang hoạt động.
+   *
+   * <ul>
+   *   <li>Key: {@code auctionId} của phiên đang được theo dõi
+   *   <li>Value: {@link WebSocketClient} đang kết nối đến channel của phiên đó
+   * </ul>
+   *
+   * <p>Dùng {@link ConcurrentHashMap} vì {@code stopWatching} có thể được gọi từ FX thread trong
+   * khi callback WebSocket chạy trên thread khác (ví dụ: khi {@code AUCTION_ENDED} tự gọi {@code
+   * stopWatching} bên trong {@code Platform.runLater}).
+   */
   private final Map<Long, WebSocketClient> watchers = new ConcurrentHashMap<>();
 
   private BackgroundBidWatcher() {}
 
+  /**
+   * Trả về instance duy nhất của {@code BackgroundBidWatcher}.
+   *
+   * @return singleton instance
+   */
   public static BackgroundBidWatcher getInstance() {
     return INSTANCE;
   }
@@ -41,12 +88,20 @@ public class BackgroundBidWatcher {
   /**
    * Bắt đầu theo dõi một phiên đấu giá trong nền.
    *
-   * <p>Nếu đã có watcher cho {@code auctionId}, phương thức này không-op (tránh kết nối đôi).
+   * <p>Mở kết nối {@link WebSocketClient} mới cho phiên {@code auctionId} và lắng nghe các sự kiện
+   * realtime. Khi nhận được sự kiện liên quan đến {@code userId}, thông báo được đẩy vào {@link
+   * NotificationStore}.
+   *
+   * <p><b>Idempotent:</b> Nếu đã có watcher cho {@code auctionId}, method này là no-op — không tạo
+   * kết nối thứ hai. Điều này đảm bảo an toàn khi gọi nhiều lần (ví dụ: user rời đi và quay lại rồi
+   * rời đi lần nữa mà không ghé màn hình chi tiết).
    *
    * @param auctionId ID phiên đấu giá cần theo dõi
-   * @param token JWT token của user
-   * @param itemName Tên sản phẩm (dùng cho nội dung thông báo)
-   * @param userId ID user hiện tại
+   * @param token JWT token của user dùng để xác thực WebSocket
+   * @param itemName tên sản phẩm đấu giá — dùng để compose nội dung thông báo; nếu {@code null} thì
+   *     fallback về {@code "Phiên #<auctionId>"}
+   * @param userId ID của user hiện tại — dùng để phân biệt sự kiện liên quan đến chính user hay
+   *     người khác
    */
   public void watch(Long auctionId, String token, String itemName, Long userId) {
     if (watchers.containsKey(auctionId)) {
@@ -115,11 +170,20 @@ public class BackgroundBidWatcher {
   }
 
   /**
-   * Dừng theo dõi một phiên đấu giá cụ thể.
+   * Dừng theo dõi một phiên đấu giá cụ thể và đóng kết nối WebSocket tương ứng.
    *
-   * <p>Thường được gọi khi user quay lại màn hình chi tiết của phiên đó.
+   * <p>Nếu không có watcher nào cho {@code auctionId}, method này là no-op.
    *
-   * @param auctionId ID phiên đấu giá cần dừng
+   * <p>Thường được gọi trong hai tình huống:
+   *
+   * <ul>
+   *   <li>User điều hướng <em>trở lại</em> màn hình chi tiết của phiên đó — tránh nhận event trùng
+   *       với kết nối WebSocket mới của {@code AuctionDetailController}.
+   *   <li>Phiên đấu giá kết thúc ({@code AUCTION_ENDED}) — watcher tự dọn dẹp từ bên trong
+   *       callback.
+   * </ul>
+   *
+   * @param auctionId ID phiên đấu giá cần dừng theo dõi
    */
   public void stopWatching(Long auctionId) {
     WebSocketClient client = watchers.remove(auctionId);
@@ -129,7 +193,12 @@ public class BackgroundBidWatcher {
     }
   }
 
-  /** Dừng tất cả watcher — gọi khi người dùng đăng xuất. */
+  /**
+   * Dừng tất cả watcher và đóng toàn bộ kết nối WebSocket đang hoạt động.
+   *
+   * <p>Được gọi bởi {@link com.auction.ui.util.SceneManager#logout()} khi người dùng đăng xuất, đảm
+   * bảo không còn kết nối nền nào giữ lại sau phiên.
+   */
   public void stopAll() {
     watchers.forEach(
         (id, client) -> {
