@@ -4,7 +4,7 @@
 
 # Online Auction System
 
-*A real-time desktop auction platform — JavaFX client · Javalin server · PostgreSQL · WebSocket*
+*A real-time desktop auction platform — JavaFX client • Javalin server • PostgreSQL • WebSocket*
 
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/kieran-labs/oop-course-project-uet/actions/workflows/ci.yml)
 [![Java](https://img.shields.io/badge/JAVA-21-orange?style=for-the-badge&logo=openjdk&logoColor=white)](https://adoptium.net/)
