@@ -549,15 +549,10 @@ public class AuctionListController implements Navigable {
                                     BigDecimal bal = node.get("balance").decimalValue();
                                     Platform.runLater(
                                         () -> {
-                                          if (lastKnownBalance != null
-                                              && bal.compareTo(lastKnownBalance) > 0) {
-                                            BigDecimal diff = bal.subtract(lastKnownBalance);
-                                            NotificationStore.getInstance()
-                                                .add(
-                                                    "Số dư tăng +"
-                                                        + VND.format(diff)
-                                                        + " — yêu cầu nạp tiền được duyệt");
-                                          }
+                                          // FIX Bug 1: KHÔNG add vào NotificationStore ở đây.
+                                          // UserBalanceWatcher (WebSocket) là nguồn DUY NHẤT
+                                          // add notification deposit. Poll chỉ track balance
+                                          // thầm lặng làm fallback.
                                           lastKnownBalance = bal;
                                         });
                                   }
