@@ -106,7 +106,7 @@ graph TB
         WSH --> SVC
         SVC --> DAO
     end
-    DAO -->|"SQL via HikariCP pool"| DB[("PostgreSQL<br/>Embedded<br/>8 tables · 6 migrations")]
+    DAO -->|"SQL via HikariCP pool"| DB[("PostgreSQL<br/>Embedded<br/>7 tables · 6 migrations")]
 ```
 ---
 
