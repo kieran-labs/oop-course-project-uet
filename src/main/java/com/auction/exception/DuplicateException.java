@@ -1,15 +1,15 @@
 package com.auction.exception;
 
 /**
- * Thrown when an operation would violate a uniqueness constraint, such as:
+ * Thrown khi thao tác vi phạm ràng buộc unique, ví dụ:
  *
  * <ul>
- *   <li>Registering a user with an existing email or username
- *   <li>Creating an item with a duplicate SKU
- *   <li>Inserting an entity whose primary key already exists
+ *   <li>Đăng ký user với email hoặc username đã tồn tại
+ *   <li>Tạo item với SKU trùng lặp
+ *   <li>Insert entity có primary key đã tồn tại
  * </ul>
  *
- * <p>Typical usage:
+ * <p>Cách dùng điển hình:
  *
  * <pre>{@code
  * if (userDao.existsByEmail(email)) {
@@ -24,19 +24,19 @@ public class DuplicateException extends AuctionException {
   private static final long serialVersionUID = 1L;
 
   /**
-   * Constructs a new DuplicateException with the specified message
+   * Khởi tạo DuplicateException với message mô tả ràng buộc unique bị vi phạm.
    *
-   * @param message description of the uniqueness violation
+   * @param message mô tả ràng buộc unique bị vi phạm
    */
   public DuplicateException(String message) {
     super(message);
   }
 
   /**
-   * Constructs a new DuplicateException with the specified message and cause
+   * Khởi tạo DuplicateException với message và nguyên nhân gốc.
    *
-   * @param message description of the uniqueness violation
-   * @param cause the underlying exception (e.g., SQLIntegrityConstraintViolationException)
+   * @param message mô tả ràng buộc unique bị vi phạm
+   * @param cause exception gốc dẫn đến lỗi này (ví dụ: SQLIntegrityConstraintViolationException)
    */
   public DuplicateException(String message, Throwable cause) {
     super(message, cause);
