@@ -4,9 +4,11 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import java.io.File;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import org.flywaydb.core.Flyway;
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,14 +16,14 @@ import org.slf4j.LoggerFactory;
 /**
  * Khởi tạo và quản lý kết nối database (Singleton, thread-safe).
  *
- * <p>Logic chọn database:
+ * <p>Luôn dùng Embedded PostgreSQL — không cần cài PostgreSQL trên máy. Người dùng chỉ cần chạy
+ * {@code java -jar auction-server.jar} là đủ.
  *
- * <ul>
- *   <li>Nếu biến môi trường {@code DB_URL} được set → kết nối PostgreSQL ngoài.
- *   <li>Nếu không có {@code DB_URL} → tự động khởi động Embedded PostgreSQL bên trong JVM.
- * </ul>
+ * <p>Data được lưu cố định tại {@code data/postgres/} trong thư mục chạy ứng dụng, đảm bảo không bị
+ * reset giữa các lần chạy.
  *
- * <p>Nhờ đó người dùng có thể chạy {@code java -jar auction.jar} mà không cần cài PostgreSQL.
+ * <p>Flyway tự động chạy các migration SQL từ {@code src/main/resources/db/migration/} mỗi khi
+ * server khởi động, đảm bảo schema database luôn khớp với version code hiện tại.
  */
 public class DatabaseConfig {
 
@@ -49,38 +51,11 @@ public class DatabaseConfig {
     if (jdbi == null) {
       synchronized (DatabaseConfig.class) {
         if (jdbi == null) {
-          String dbUrl = System.getenv("DB_URL");
-
-          if (dbUrl != null && !dbUrl.isBlank()) {
-            // ── Trường hợp 1: Dùng PostgreSQL ngoài ──────────────────────
-            initExternalPostgres(dbUrl);
-          } else {
-            // ── Trường hợp 2: Tự khởi động Embedded PostgreSQL ───────────
-            initEmbeddedPostgres();
-          }
+          initEmbeddedPostgres();
         }
       }
     }
     return jdbi;
-  }
-
-  /** Kết nối tới PostgreSQL ngoài qua biến môi trường DB_URL, DB_USER, DB_PASSWORD. */
-  private static void initExternalPostgres(String dbUrl) {
-    String dbUser = getEnvOrDefault("DB_USER", "postgres");
-    String dbPass = getEnvOrDefault("DB_PASSWORD", "auction_pass");
-
-    LOGGER.info("🔗 Kết nối PostgreSQL ngoài: {}", dbUrl);
-
-    HikariConfig config = buildHikariConfig(dbUrl, dbUser, dbPass);
-
-    try {
-      dataSource = new HikariDataSource(config);
-      jdbi = Jdbi.create(dataSource);
-      LOGGER.info("✅ Kết nối PostgreSQL ngoài thành công");
-    } catch (Exception e) {
-      LOGGER.error("❌ Không thể kết nối PostgreSQL ngoài: {}", e.getMessage());
-      throw new RuntimeException("Could not connect to external database", e);
-    }
   }
 
   /**
@@ -91,7 +66,7 @@ public class DatabaseConfig {
    * bị reset giữa các lần chạy.
    */
   private static void initEmbeddedPostgres() {
-    LOGGER.info("🚀 Không tìm thấy DB_URL — khởi động Embedded PostgreSQL...");
+    LOGGER.info("🚀 Khởi động Embedded PostgreSQL...");
     LOGGER.info("   (Lần đầu chạy có thể mất 10-30 giây để tải PostgreSQL binary)");
     LOGGER.info("   Data directory: {}", EMBEDDED_DATA_DIR.getAbsolutePath());
 
@@ -102,9 +77,21 @@ public class DatabaseConfig {
         LOGGER.info("📁 Đã tạo data directory: {}", EMBEDDED_DATA_DIR.getAbsolutePath());
       }
 
-      // Xóa postmaster.pid nếu còn sót từ lần chạy trước bị crash
+      // Xóa postmaster.pid nếu còn sót — và kill process cũ nếu vẫn đang chạy
       File pidFile = new File(EMBEDDED_DATA_DIR, "postmaster.pid");
       if (pidFile.exists()) {
+        try {
+          String firstLine = Files.readAllLines(pidFile.toPath()).get(0).trim();
+          long oldPid = Long.parseLong(firstLine);
+          ProcessHandle.of(oldPid)
+              .ifPresent(
+                  p -> {
+                    p.destroyForcibly();
+                    LOGGER.warn("⚠️  Đã kill PostgreSQL process cũ (PID {})", oldPid);
+                  });
+        } catch (Exception ignored) {
+          // Không đọc được PID → bỏ qua, xóa file rồi tiếp tục
+        }
         pidFile.delete();
         LOGGER.warn("⚠️  Đã xóa postmaster.pid còn sót từ lần chạy trước");
       }
@@ -112,8 +99,6 @@ public class DatabaseConfig {
       embeddedPostgres = EmbeddedPostgres.builder().setDataDirectory(EMBEDDED_DATA_DIR).start();
 
       int port = embeddedPostgres.getPort();
-
-      // Embedded PostgreSQL mặc định: user=postgres, password=""
       String dbUser = "postgres";
       String dbPass = "";
 
@@ -138,13 +123,66 @@ public class DatabaseConfig {
       HikariConfig config = buildHikariConfig(dbUrl, dbUser, dbPass);
 
       dataSource = new HikariDataSource(config);
+
+      // ── CHẠY FLYWAY MIGRATION TRƯỚC KHI TẠO JDBI ──────────────────────
+      runMigrations(dataSource);
+
       jdbi = Jdbi.create(dataSource);
+
+      // ── Đăng ký shutdown hook ngay tại đây ───────────────────────────
+      // Đảm bảo PostgreSQL luôn được đóng sạch dù server tắt theo cách nào
+      // (Ctrl+C, kill, đóng cửa sổ terminal...) — không phụ thuộc vào App.java
+      Runtime.getRuntime()
+          .addShutdownHook(
+              new Thread(
+                  () -> {
+                    LOGGER.info("⏹ JVM shutdown — đóng database...");
+                    shutDown();
+                  },
+                  "db-shutdown-hook"));
 
       LOGGER.info("✅ Kết nối Embedded PostgreSQL thành công");
 
     } catch (Exception e) {
       LOGGER.error("❌ Không thể khởi động Embedded PostgreSQL: {}", e.getMessage());
       throw new RuntimeException("Could not start embedded database", e);
+    }
+  }
+
+  /**
+   * Chạy tất cả database migrations chưa được áp dụng.
+   *
+   * <p>Flyway tự động theo dõi version qua bảng {@code flyway_schema_history}, đảm bảo mỗi file
+   * migration chỉ chạy đúng một lần duy nhất.
+   *
+   * <p>Migration files: {@code src/main/resources/db/migration/V*.sql}
+   *
+   * <p>{@code baselineOnMigrate(true)}: quan trọng cho database đã tồn tại sẵn — Flyway sẽ coi DB
+   * hiện tại là baseline và chỉ chạy các migration mới hơn, không thực thi lại các file cũ.
+   *
+   * @param dataSource HikariCP DataSource đã được cấu hình
+   */
+  private static void runMigrations(HikariDataSource dataSource) {
+    LOGGER.info("🔄 Đang chạy database migrations...");
+
+    Flyway flyway =
+        Flyway.configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .baselineOnMigrate(true) // Cho phép migration trên DB đã tồn tại
+            .validateOnMigrate(true) // Kiểm tra checksum để phát hiện file bị sửa
+            .load();
+
+    try {
+      var result = flyway.migrate();
+      if (result.migrationsExecuted == 0) {
+        LOGGER.info("✅ Migration hoàn tất — không có migration mới cần áp dụng");
+      } else {
+        LOGGER.info("✅ Migration hoàn tất — {} file đã được áp dụng", result.migrationsExecuted);
+      }
+    } catch (Exception e) {
+      LOGGER.error("❌ Migration thất bại: {}", e.getMessage(), e);
+      throw new RuntimeException("Database migration failed", e);
     }
   }
 
@@ -162,7 +200,7 @@ public class DatabaseConfig {
     return config;
   }
 
-  /** Đóng toàn bộ connection pool và embedded PostgreSQL (nếu có). Gọi khi server tắt. */
+  /** Đóng toàn bộ connection pool và embedded PostgreSQL. Gọi khi server tắt. */
   public static void shutDown() {
     if (dataSource != null && !dataSource.isClosed()) {
       dataSource.close();
@@ -180,10 +218,5 @@ public class DatabaseConfig {
         LOGGER.warn("Lỗi khi tắt Embedded PostgreSQL: {}", e.getMessage());
       }
     }
-  }
-
-  private static String getEnvOrDefault(String key, String defaultValue) {
-    String value = System.getenv(key);
-    return (value != null && !value.isEmpty()) ? value : defaultValue;
   }
 }

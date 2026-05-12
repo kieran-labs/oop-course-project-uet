@@ -99,6 +99,14 @@ dependencies {
     // Liên kết: DatabaseConfig.java kiểm tra DB_URL → nếu không có → dùng cái này.
     implementation("io.zonky.test:embedded-postgres:2.0.7")
 
+    // ── DATABASE MIGRATION ───────────────────────────────────────────────────
+    // Flyway: tự động chạy các file migration SQL khi khởi động server
+    // Đảm bảo schema database luôn khớp với version code hiện tại.
+    // Migration files: src/main/resources/db/migration/V*.sql
+    // Liên kết: DatabaseConfig.java gọi Flyway.migrate() sau khi tạo dataSource
+    implementation("org.flywaydb:flyway-core:10.15.0")
+    implementation("org.flywaydb:flyway-database-postgresql:10.15.0")
+
     // ── SERVER ──────────────────────────────────────────────────────────────
     // Javalin: HTTP server + WebSocket server
     // Đây là framework đã chọn (Mảng 5).
@@ -180,109 +188,69 @@ dependencies {
 
     // Mockito: tạo mock object để test từng lớp độc lập
     // Ví dụ: test BidService mà không cần PostgreSQL thật
-    //   → Mockito giả lập AuctionDao, trả về data giả
-    //   → BidService không biết đang dùng DAO giả → test logic thuần túy
-    // mockito-junit-jupiter: tích hợp Mockito với JUnit 5 (@ExtendWith, @Mock)
-    // Liên kết: BidServiceTest.java, AuctionServiceTest.java dùng @Mock.
-    testImplementation("org.mockito:mockito-core:5.14.2")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.14.2")
-
-    // SpotBugs annotations: dùng @SuppressFBWarnings để tắt cảnh báo cụ thể
-    // khi bạn chắc chắn một đoạn code không có bug dù SpotBugs báo.
-    // compileOnly = không đóng gói vào .jar, chỉ dùng khi compile.
-    compileOnly("com.github.spotbugs:spotbugs-annotations:4.8.6")
+    //   → Mock AuctionDao, BidDao, WebSocketHandler
+    //   → Test LOGIC của BidService mà không lo database hay network
+    // Liên kết: test service layer (BidServiceTest, AuctionServiceTest...)
+    testImplementation("org.mockito:mockito-core:5.15.2")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.15.2")
 }
 
 // ============================================================================
-// JAVAFX — Cấu hình giao diện client
+// JAVAFX — UI Framework cho client
 // ============================================================================
-// Plugin tự tải JavaFX 21.0.5 cho đúng OS.
-// javafx.controls: Button, Label, TableView, LineChart (dùng cho bid history chart)
-// javafx.fxml: cho phép load file .fxml (giao diện tách riêng khỏi code)
-// Liên kết: ClientApp.java, tất cả file trong src/main/resources/fxml/
+// javafx-controls: Button, Label, TextField, ListView...
+// javafx-fxml: đọc .fxml file (UI được thiết kế trong Scene Builder)
+// javafx-web: WebView component — nhúng browser vào JavaFX
+// Khi compile, plugin tự tải các module JavaFX phù hợp với OS
 javafx {
-    version = "21.0.5"
-    modules("javafx.controls", "javafx.fxml")
+    version = "21"
+    modules = listOf("javafx.controls", "javafx.fxml", "javafx.web")
 }
 
 // ============================================================================
-// APPLICATION — Entry points
+// APPLICATION — Entry point
 // ============================================================================
-// mainClass: class nào được chạy khi gõ ./gradlew run
-// Ở đây là server (Javalin). Client có task riêng: ./gradlew runClient
+// Khi chạy ./gradlew run → Gradle sẽ chạy main() của class này
+// Server mặc định: App.java
 application {
     mainClass.set("com.auction.App")
 }
 
-// Task chạy JavaFX client riêng biệt
-// Trong thực tế khi dev: mở 2 terminal, 1 chạy server, 1 chạy client.
-// Hoặc trong IntelliJ tạo 2 Run Configuration.
-tasks.register<JavaExec>("runClient") {
-    group = "application"
-    description = "Chạy JavaFX client"
-
-    classpath = sourceSets["main"].runtimeClasspath
-    mainClass.set("com.auction.ClientApp")
-
-    val os = System.getProperty("os.name").lowercase()
-    val platform =
-        when {
-            os.contains("win") -> "win"
-            os.contains("mac") -> "mac"
-            else -> "linux"
-        }
-
-    val javafxLibPath =
-        configurations.runtimeClasspath.get()
-            .filter { it.name.contains("javafx") && it.name.contains(platform) }
-            .joinToString(File.pathSeparator) { it.absolutePath }
-
-    jvmArgs = listOf(
-        "--module-path", javafxLibPath,
-        "--add-modules", "javafx.controls,javafx.fxml"
-    )
-}
-
 // ============================================================================
-// TESTING — Cấu hình JUnit 5
+// TESTING — JUnit 5
 // ============================================================================
-// useJUnitPlatform(): bảo Gradle dùng JUnit 5 engine (không phải JUnit 4)
-// Không có dòng này → Gradle mặc định JUnit 4 → không tìm thấy test nào
-// vì annotation @Test của JUnit 4 (org.junit.Test) khác JUnit 5 (org.junit.jupiter.api.Test)
-//
-// testLogging với FULL exception format: hiện chi tiết lỗi SQL từ PostgreSQL
+// useJUnitPlatform(): bắt buộc để Gradle biết chạy JUnit 5 (không phải JUnit 4)
 tasks.test {
     useJUnitPlatform()
+    maxHeapSize = "512m"
 
     testLogging {
-        events("passed", "skipped", "failed", "standardOut", "standardError")
-        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-        showExceptions = true
-        showCauses = true
-        showStackTraces = true
-        showStandardStreams = true
+        events("passed", "skipped", "failed")
+        showStandardStreams = false
     }
 }
 
 // ============================================================================
-// JACOCO — Đo test coverage
+// JACOCO — Test coverage
 // ============================================================================
-// Chạy test trước (dependsOn) → rồi tạo HTML report
-// Report nằm trong build/reports/jacoco/test/html/index.html
-// CI pipeline upload report này lên GitHub Artifacts → giám khảo xem được
+// Đo độ bao phủ test (bao nhiêu % code được chạy qua khi test)
+// Chạy ./gradlew jacocoTestReport → tạo HTML report tại build/reports/jacoco/test/html/
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
     reports {
         html.required.set(true)
+        xml.required.set(true)
+        csv.required.set(false)
     }
 }
 
 // ============================================================================
 // CHECKSTYLE — Kiểm tra coding convention
 // ============================================================================
-// Đọc quy tắc từ config/checkstyle/checkstyle.xml (Google Java Style)
-// isIgnoreFailures = false: vi phạm → build FAIL → CI fail → không merge được
-// Dùng trong CI (kiểm tra). Developer trên máy dùng Spotless (tự sửa).
+// Đọc quy tắc từ config/checkstyle/checkstyle.xml
+// Chạy ./gradlew checkstyleMain → kiểm tra code trong src/main/
+// Chạy ./gradlew checkstyleTest → kiểm tra code trong src/test/
+// isIgnoreFailures = false → build FAIL nếu vi phạm convention
 checkstyle {
     toolVersion = "10.21.1"
     configFile = file("config/checkstyle/checkstyle.xml")
@@ -384,6 +352,25 @@ tasks.shadowJar {
     // Gộp file META-INF/services — quan trọng cho SLF4J, JDBI, Javalin hoạt động đúng
     mergeServiceFiles()
 
+    // Loại bỏ JavaFX — chỉ cần ở client, server không có UI
+    exclude("javafx/**")
+    exclude("com/sun/javafx/**")
+    exclude("com/sun/prism/**")
+    exclude("com/sun/glass/**")
+    exclude("com/sun/marlin/**")
+    exclude("com/sun/scenario/**")
+    exclude("com/sun/pisces/**")
+    exclude("com/sun/openpisces/**")
+    exclude("javafx_font.dll")
+    exclude("javafx_iio.dll")
+    exclude("javafx-swt.jar")
+    exclude("javafx.properties")
+
+    // Loại bỏ compile-time annotations — không cần khi chạy
+    exclude("org/checkerframework/**")
+    exclude("org/intellij/**")
+    exclude("org/jetbrains/**")
+
     // Loại bỏ file chữ ký để tránh lỗi SecurityException khi chạy fat JAR
     exclude("META-INF/*.SF")
     exclude("META-INF/*.DSA")
@@ -413,6 +400,20 @@ tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shad
         // Launcher.java là wrapper không extends Application — bắt buộc cho fat JAR JavaFX
         attributes["Main-Class"] = "com.auction.Launcher"
     }
+
+    // Loại bỏ server-only dependencies — client chỉ cần giao tiếp HTTP, không chạy server
+    exclude("io/javalin/**")        // Javalin HTTP server
+    exclude("org/eclipse/jetty/**") // Jetty (web server bên trong Javalin)
+    exclude("io/zonky/**")          // Embedded PostgreSQL
+    exclude("org/postgresql/**")    // PostgreSQL JDBC driver
+    exclude("com/zaxxer/**")        // HikariCP connection pool
+    exclude("org/jdbi/**")          // JDBI SQL wrapper
+    exclude("db/migration/**")      // Flyway migration SQL files
+
+    // Loại bỏ compile-time annotations — không cần khi chạy
+    exclude("org/checkerframework/**")
+    exclude("org/intellij/**")
+    exclude("org/jetbrains/**")
 
     mergeServiceFiles()
     exclude("META-INF/*.SF")
