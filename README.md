@@ -76,12 +76,11 @@ The project covers **3 user roles** (Admin, Seller, Bidder), **3 item categories
 - [x] **Anti-sniping** - bid in final 30s → extend by 60s → broadcast `TIME_EXTENDED`
 - [x] **Live Bid History Chart** - JavaFX `LineChart` updated in real time from WebSocket events, no manual refresh needed
 
----
 # 1. Domain Model
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
     class Entity { <<abstract>> -Long id; -LocalDateTime createdAt }
     class User { <<abstract>> -String username; -String email; -BigDecimal balance; +getRole() String }
     class Bidder { +getRole() String }
@@ -117,7 +116,7 @@ classDiagram
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
     class RuntimeException
     class AuctionException { <<abstract>> +AuctionException(String message) +AuctionException(String message, Throwable cause) }
     class AuctionClosedException { +AuctionClosedException(String message) }
