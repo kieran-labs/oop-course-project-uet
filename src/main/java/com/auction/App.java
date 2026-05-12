@@ -124,8 +124,9 @@ public class App {
         .addShutdownHook(
             new Thread(
                 () -> {
-                  scheduler.stop();
                   LOGGER.info("Server đang tắt...");
+                  scheduler.stop();
+                  DatabaseConfig.shutDown(); // <-- THÊM DÒNG NÀY
                 }));
 
     // ── 8. Tạo Javalin instance ──────────────────────────────
