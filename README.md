@@ -85,24 +85,108 @@ The project covers **3 user roles** (Admin, Seller, Bidder), **3 item categories
 classDiagram
     direction TB
 
-    class Entity { <<abstract>> }
+    class Entity {
+        <<abstract>>
+        -Long id
+        -LocalDateTime createdAt
+    }
 
-    class Item { <<abstract>> }
-    class User { <<abstract>> }
+    class User {
+        <<abstract>>
+        -String username
+        -String email
+        -String passwordHash
+        -BigDecimal balance
+        +getRole() String
+    }
 
+    class Bidder {
+        +getRole() String
+    }
+
+    class Seller {
+        +getRole() String
+    }
+
+    class Admin {
+        +getRole() String
+    }
+
+    class Item {
+        <<abstract>>
+        -String name
+        -String description
+        -Long sellerId
+        +getCategory() String
+    }
+
+    class Electronics {
+        -String brand
+        +getCategory() String
+    }
+
+    class Art {
+        -String artist
+        +getCategory() String
+    }
+
+    class Vehicle {
+        -int year
+        +getCategory() String
+    }
+
+    class Auction {
+        -Long itemId
+        -Long sellerId
+        -BigDecimal startingPrice
+        -BigDecimal currentPrice
+        -LocalDateTime startTime
+        -LocalDateTime endTime
+        -String status
+    }
+
+    class BidTransaction {
+        -Long auctionId
+        -Long bidderId
+        -BigDecimal amount
+        -boolean autoBid
+    }
+
+    class AutoBidConfig {
+        -Long auctionId
+        -Long bidderId
+        -BigDecimal maxBid
+        -BigDecimal increment
+        -LocalDateTime registeredAt
+    }
+
+    class DepositRecord {
+        -Long userId
+        -BigDecimal amount
+        -String status
+    }
+
+    class PasswordResetRecord {
+        -Long userId
+        -String token
+        -String status
+    }
+
+    Entity <|-- User
+    Entity <|-- Item
     Entity <|-- Auction
     Entity <|-- BidTransaction
     Entity <|-- AutoBidConfig
-    Entity <|-- Item
-    Entity <|-- User
+    Entity <|-- DepositRecord
+    Entity <|-- PasswordResetRecord
 
-    Item <|-- Art
-    Item <|-- Electronics
-    Item <|-- Vehicle
-
-    User <|-- Admin
-    User <|-- Seller
     User <|-- Bidder
+    User <|-- Seller
+    User <|-- Admin
+
+    Item <|-- Electronics
+    Item <|-- Art
+    Item <|-- Vehicle
 ```
 
 ---
@@ -114,13 +198,38 @@ classDiagram
     direction TB
 
     class RuntimeException
-    class AuctionException { <<abstract>> }
+
+    class AuctionException {
+        <<abstract>>
+        +AuctionException(String message)
+        +AuctionException(String message, Throwable cause)
+    }
+
+    class AuctionClosedException {
+        +AuctionClosedException(String message)
+    }
+
+    class InvalidBidException {
+        +InvalidBidException(String message)
+    }
+
+    class NotFoundException {
+        +NotFoundException(String message)
+    }
+
+    class DuplicateException {
+        +DuplicateException(String message)
+    }
+
+    class UnauthorizedException {
+        +UnauthorizedException(String message)
+    }
 
     RuntimeException <|-- AuctionException
     AuctionException <|-- AuctionClosedException
-    AuctionException <|-- DuplicateException
     AuctionException <|-- InvalidBidException
     AuctionException <|-- NotFoundException
+    AuctionException <|-- DuplicateException
     AuctionException <|-- UnauthorizedException
 ```
 
@@ -132,19 +241,107 @@ classDiagram
 classDiagram
     direction TB
 
-    class AuctionState { <<interface>> }
+    class AuctionState {
+        <<interface>>
+        +placeBid(Auction, Long, BigDecimal) void
+        +close(Auction) void
+        +edit(Auction) void
+        +extend(Auction, LocalDateTime) void
+    }
+
+    class OpenState {
+        +placeBid(Auction, Long, BigDecimal) void
+        +close(Auction) void
+        +edit(Auction) void
+        +extend(Auction, LocalDateTime) void
+    }
+
+    class RunningState {
+        +placeBid(Auction, Long, BigDecimal) void
+        +close(Auction) void
+        +edit(Auction) void
+        +extend(Auction, LocalDateTime) void
+    }
+
+    class FinishedState {
+        +placeBid(Auction, Long, BigDecimal) void
+        +close(Auction) void
+        +edit(Auction) void
+        +extend(Auction, LocalDateTime) void
+    }
+
+    class PaidState {
+        +placeBid(Auction, Long, BigDecimal) void
+        +close(Auction) void
+        +edit(Auction) void
+        +extend(Auction, LocalDateTime) void
+    }
+
+    class CanceledState {
+        +placeBid(Auction, Long, BigDecimal) void
+        +close(Auction) void
+        +edit(Auction) void
+        +extend(Auction, LocalDateTime) void
+    }
+
     AuctionState <|.. OpenState
     AuctionState <|.. RunningState
     AuctionState <|.. FinishedState
-    AuctionState <|.. CanceledState
     AuctionState <|.. PaidState
+    AuctionState <|.. CanceledState
 
-    class BidStrategy { <<interface>> }
+    class BidStrategy {
+        <<interface>>
+        +execute(Auction, Long, BigDecimal, boolean) void
+    }
+
+    class ManualBidStrategy {
+        +execute(Auction, Long, BigDecimal, boolean) void
+    }
+
+    class AutoBidStrategy {
+        -PriorityQueue~AutoBidConfig~ queue
+        +execute(Auction, Long, BigDecimal, boolean) void
+    }
+
     BidStrategy <|.. ManualBidStrategy
     BidStrategy <|.. AutoBidStrategy
 
-    class AuctionEventListener { <<interface>> }
+    class AuctionEventListener {
+        <<interface>>
+        +onBidUpdate(Long, BigDecimal, String) void
+        +onTimeExtended(Long, LocalDateTime) void
+        +onAuctionEnd(Long, String, BigDecimal) void
+    }
+
+    class AuctionEventManager {
+        -Map~Long_List~ listeners
+        +subscribe(Long, AuctionEventListener) void
+        +unsubscribe(Long, AuctionEventListener) void
+        +notifyBidUpdate(Long, BigDecimal, String) void
+        +notifyTimeExtended(Long, LocalDateTime) void
+        +notifyAuctionEnd(Long, String, BigDecimal) void
+    }
+
+    class WebSocketObserver {
+        -WsContext session
+        +onBidUpdate(Long, BigDecimal, String) void
+        +onTimeExtended(Long, LocalDateTime) void
+        +onAuctionEnd(Long, String, BigDecimal) void
+    }
+
     AuctionEventListener <|.. WebSocketObserver
+    AuctionEventManager o-- AuctionEventListener
+
+    class ItemFactory {
+        +create(CreateItemRequest, Long) Item
+    }
+
+    class Item {
+        <<abstract>>
+    }
+
+    ItemFactory ..> Item : creates
 ```
 
 ---
@@ -156,9 +353,87 @@ classDiagram
     direction TB
 
     class Application
+    class ClientApp {
+        +start(Stage) void
+        +main(String[]) void
+    }
     Application <|-- ClientApp
 
-    class Navigable { <<interface>> }
+    class Navigable {
+        <<interface>>
+        +onNavigatedTo(Object data) void
+    }
+
+    class SceneManager {
+        -Stage primaryStage
+        -Map~String_Scene~ sceneCache
+        +getInstance() SceneManager
+        +navigateTo(String scene, Object data) void
+        +showScene(String scene) void
+    }
+
+    class LoginController {
+        +onNavigatedTo(Object data) void
+        +handleLogin() void
+    }
+
+    class RegisterController {
+        +onNavigatedTo(Object data) void
+        +handleRegister() void
+    }
+
+    class AuctionListController {
+        +onNavigatedTo(Object data) void
+        +loadAuctions() void
+        +handleSearch() void
+    }
+
+    class AuctionDetailController {
+        -WebSocketClient wsClient
+        -LineChart bidChart
+        +onNavigatedTo(Object data) void
+        +handleBid() void
+        +handleAutoBid() void
+        +connectWebSocket() void
+    }
+
+    class CreateAuctionController {
+        +onNavigatedTo(Object data) void
+        +handleCreate() void
+    }
+
+    class CreateItemController {
+        +onNavigatedTo(Object data) void
+        +handleCreate() void
+    }
+
+    class AdminPanelController {
+        +onNavigatedTo(Object data) void
+        +loadUsers() void
+        +approveDeposit() void
+        +approvePasswordReset() void
+    }
+
+    class ProfileController {
+        +onNavigatedTo(Object data) void
+        +loadProfile() void
+    }
+
+    class DepositController {
+        +onNavigatedTo(Object data) void
+        +handleDeposit() void
+    }
+
+    class ChangePasswordController {
+        +onNavigatedTo(Object data) void
+        +handleChange() void
+    }
+
+    class ForgotPasswordController {
+        +onNavigatedTo(Object data) void
+        +handleRequest() void
+    }
+
     Navigable <|.. LoginController
     Navigable <|.. RegisterController
     Navigable <|.. AuctionListController
