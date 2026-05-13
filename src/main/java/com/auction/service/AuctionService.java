@@ -56,11 +56,9 @@ public class AuctionService {
    * <p>GET /api/auctions?status=RUNNING → chỉ lấy auctions đang chạy. GET /api/auctions → lấy tất
    * cả.
    */
+  @Deprecated(since = "1.1", forRemoval = true)
   public List<Auction> getAllAuctions(String status) {
-    if (status != null && !status.isBlank()) {
-      return auctionDao.findByStatus(status.toUpperCase());
-    }
-    return auctionDao.findAll();
+    return getAll(status, PageRequest.of(0, 100)).stream().map(this::toAuction).toList();
   }
 
   /**
@@ -268,6 +266,10 @@ public class AuctionService {
         throw new UnauthorizedException("Bạn không có quyền hủy phiên đấu giá của người khác!");
       }
 
+      if (AuctionStatus.RUNNING == auction.getStatus() && !"ADMIN".equals(role)) {
+        throw new IllegalStateException("Cannot cancel a running auction. Only ADMIN is allowed.");
+      }
+
       AuctionStatus status = auction.getStatus();
       if (status != AuctionStatus.OPEN && status != AuctionStatus.RUNNING) {
         throw new IllegalStateException(
@@ -362,6 +364,22 @@ public class AuctionService {
           }
           auctionDao.updateInTransaction(handle, auction);
         });
+  }
+
+  private Auction toAuction(AuctionResponse response) {
+    Auction auction = new Auction();
+    auction.setId(response.getId());
+    auction.setItemId(response.getItemId());
+    auction.setSellerId(response.getSellerId());
+    auction.setStartingPrice(response.getStartingPrice());
+    auction.setCurrentPrice(response.getCurrentPrice());
+    auction.setLeadingBidderId(response.getLeadingBidderId());
+    auction.setStartTime(response.getStartTime());
+    auction.setEndTime(response.getEndTime());
+    if (response.getStatus() != null) {
+      auction.setStatus(AuctionStatus.from(response.getStatus()));
+    }
+    return auction;
   }
 
   /**

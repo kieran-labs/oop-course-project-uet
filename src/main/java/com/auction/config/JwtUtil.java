@@ -16,11 +16,8 @@ public class JwtUtil {
     SECRET_KEY = (envSecret != null && !envSecret.isBlank()) ? envSecret : "auction-secret-key-dev";
   }
 
-  private static final Algorithm ALGORITHM =
-      Algorithm.HMAC256(
-          SECRET_KEY); // Đây là thuật toán mã hóa đối xứng. Nghĩa là hệ thống dùng chung 1 cái
-
-  // SECRET_KEY vừa để khóa (tạo token) vừa để mở khóa (xác minh token).
+  /** HMAC-256 symmetric signing algorithm; uses the same key to sign and verify. */
+  private static final Algorithm ALGORITHM = Algorithm.HMAC256(SECRET_KEY);
 
   /**
    * Singleton verifier — initialized once at class load, reused for every request. Thread-safe:
