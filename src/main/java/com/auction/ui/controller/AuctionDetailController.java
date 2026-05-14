@@ -552,7 +552,7 @@ public class AuctionDetailController implements Navigable {
     autoBidSpinner.setVisible(true);
     autoBidSpinner.setManaged(true);
     if (autoBidSpinnerTransition == null) {
-      autoBidSpinnerTransition = new RotateTransition(Duration.seconds(1.2), autoBidSpinner);
+      autoBidSpinnerTransition = new RotateTransition(Duration.seconds(1.7), autoBidSpinner);
       autoBidSpinnerTransition.setFromAngle(0);
       autoBidSpinnerTransition.setToAngle(360);
       autoBidSpinnerTransition.setCycleCount(Timeline.INDEFINITE);

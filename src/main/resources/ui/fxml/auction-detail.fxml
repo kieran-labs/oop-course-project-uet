@@ -137,7 +137,7 @@
                           styleClass="secondary-button" onAction="#handleCancelAutoBid" />
                   <Label fx:id="autoBidSpinner" text="⚙"
                          visible="false" managed="false"
-                         style="-fx-font-size: 50px; -fx-text-fill: #2196f3; -fx-font-weight: bold; -fx-padding: -8 0 -8 0;" />
+                         style="-fx-font-family: 'Segoe UI Symbol'; -fx-font-size: 48px; -fx-text-fill: #1976d2; -fx-font-weight: bold; -fx-padding: -7 0 -7 0;" />
                </HBox>
                <Label fx:id="autoBidStatusLabel" styleClass="detail-text" text=""
                       wrapText="true" />
