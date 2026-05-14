@@ -3,6 +3,7 @@ package com.auction.ui.controller;
 import com.auction.dto.AuctionResponse;
 import com.auction.ui.util.Navigable;
 import com.auction.ui.util.SceneManager;
+import com.auction.util.NotificationItem;
 import com.auction.util.NotificationStore;
 import com.auction.util.RestClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -281,21 +282,9 @@ public class AuctionListController implements Navigable {
   @FXML
   public void handleBellClick() {
     NotificationStore store = NotificationStore.getInstance();
+    // markAllRead calls PATCH /api/notifications/mark-all-read async, then updates local state.
+    // Badge update is driven by the unreadCountProperty listener registered in onNavigatedTo().
     store.markAllRead();
-    updateBadge();
-    Thread.ofVirtual()
-        .start(
-            () -> {
-              try {
-                HttpResponse<String> response =
-                    RestClient.patch("/api/notifications/mark-all-read", null);
-                if (response.statusCode() >= 400) {
-                  LOGGER.warn("Mark notifications read failed: {}", response.statusCode());
-                }
-              } catch (Exception e) {
-                LOGGER.debug("Mark notifications read error: {}", e.getMessage());
-              }
-            });
 
     Popup popup = new Popup();
     popup.setAutoHide(true);
@@ -318,7 +307,7 @@ public class AuctionListController implements Navigable {
     sep.setStyle("-fx-background-color: rgba(255,255,255,0.15);");
     content.getChildren().addAll(header, sep);
 
-    ObservableList<String> notifications = store.getNotifications();
+    ObservableList<NotificationItem> notifications = store.getNotifications();
     ScrollPane scrollPane = null;
     if (notifications.isEmpty()) {
       Label empty = new Label("Chưa có thông báo nào.");
@@ -329,7 +318,7 @@ public class AuctionListController implements Navigable {
       int limit = Math.min(notifications.size(), 50);
       // NotificationStore: index 0 = moi nhat, hien thi moi nhat o tren cung.
       for (int i = 0; i < limit; i++) {
-        NotificationRow row = buildNotificationRow(notifications.get(i), null);
+        NotificationRow row = buildNotificationRow(notifications.get(i).getMessage(), null);
         items.getChildren().add(row.node());
       }
       scrollPane = new ScrollPane(items);
@@ -595,9 +584,9 @@ public class AuctionListController implements Navigable {
   }
 
   private BigDecimal findPreviousBalanceBefore(
-      ObservableList<String> notifications, int displayedLimit) {
+      ObservableList<NotificationItem> notifications, int displayedLimit) {
     for (int i = notifications.size() - 1; i >= displayedLimit; i--) {
-      BigDecimal balance = parseNewBalance(notifications.get(i));
+      BigDecimal balance = parseNewBalance(notifications.get(i).getMessage());
       if (balance != null) {
         return balance;
       }
@@ -610,10 +599,10 @@ public class AuctionListController implements Navigable {
    * tinh delta = newBalance_hien_tai - newBalance_truoc_do.
    */
   private BigDecimal findPreviousBalanceAt(
-      ObservableList<String> notifications, int fromIndex, int limit) {
+      ObservableList<NotificationItem> notifications, int fromIndex, int limit) {
     // Tim trong cac thong bao cu hon (index >= fromIndex)
     for (int i = fromIndex; i < notifications.size(); i++) {
-      BigDecimal balance = parseNewBalance(notifications.get(i));
+      BigDecimal balance = parseNewBalance(notifications.get(i).getMessage());
       if (balance != null) {
         return balance;
       }

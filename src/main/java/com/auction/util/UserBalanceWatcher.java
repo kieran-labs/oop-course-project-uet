@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -202,20 +203,33 @@ public class UserBalanceWatcher {
 
       if (response.statusCode() == 200) {
         var root = MAPPER.readTree(response.body());
-        List<String> unreadMessages = new ArrayList<>();
+        List<NotificationItem> unreadItems = new ArrayList<>();
         for (var node : root) {
           String message = node.has("message") ? node.get("message").asText() : "";
           boolean isRead = node.has("is_read") && node.get("is_read").asBoolean();
           if (!isRead && !message.isEmpty()) {
-            unreadMessages.add(message);
+            Long id = node.has("id") && !node.get("id").isNull() ? node.get("id").asLong() : null;
+            String type =
+                node.has("notification_type") && !node.get("notification_type").isNull()
+                    ? node.get("notification_type").asText()
+                    : null;
+            LocalDateTime createdAt = null;
+            if (node.has("created_at") && !node.get("created_at").isNull()) {
+              try {
+                createdAt = MAPPER.convertValue(node.get("created_at"), LocalDateTime.class);
+              } catch (Exception ignored) {
+                // createdAt remains null if parsing fails
+              }
+            }
+            unreadItems.add(new NotificationItem(id, message, type, false, createdAt));
           }
         }
-        Collections.reverse(unreadMessages);
+        Collections.reverse(unreadItems);
         Platform.runLater(
             () -> {
-              for (String message : unreadMessages) {
-                NotificationStore.getInstance().add(message);
-                LOGGER.info("Đã load offline notification: {}", message);
+              for (NotificationItem item : unreadItems) {
+                NotificationStore.getInstance().add(item);
+                LOGGER.info("Đã load offline notification: {}", item.getMessage());
               }
             });
       }
