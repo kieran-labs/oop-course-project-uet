@@ -1,10 +1,12 @@
 package com.auction.util;
 
-import java.util.prefs.Preferences;
+import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyIntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Singleton lưu trữ danh sách thông báo bid trong phiên làm việc hiện tại.
@@ -26,14 +28,20 @@ import javafx.collections.ObservableList;
  * <h2>Unread count</h2>
  *
  * {@link #unreadCountProperty()} là {@link ReadOnlyIntegerProperty} có thể bind trực tiếp vào UI
- * (badge, label...). Count tăng mỗi khi {@link #add} được gọi và reset về 0 khi user mở panel thông
- * báo (gọi {@link #markAllRead()}).
+ * (badge, label...). Count tăng mỗi khi một {@link NotificationItem} chưa đọc được thêm vào và
+ * reset về 0 khi {@link #markAllRead()} hoàn tất với server.
+ *
+ * <h2>Persistence</h2>
+ *
+ * {@link #markAllRead()} gọi {@code PATCH /api/notifications/mark-all-read} trên background thread
+ * rồi cập nhật local state sau khi server xác nhận. State đọc/chưa đọc là sự thật từ server — không
+ * dùng {@code java.util.prefs.Preferences}.
  *
  * <h2>Vòng đời</h2>
  *
- * Store tồn tại trong suốt phiên. Khi user đăng xuất, {@link SceneManager#logout()} gọi {@link
- * #clear()} để xóa toàn bộ thông báo và reset unread count trước khi điều hướng về {@code
- * welcome.fxml}.
+ * Store tồn tại trong suốt phiên. Khi user đăng xuất, {@link
+ * com.auction.ui.util.SceneManager#logout()} gọi {@link #clear()} để xóa toàn bộ thông báo trong bộ
+ * nhớ (không ghi Preferences).
  *
  * @see UserBalanceWatcher
  * @see BackgroundBidWatcher
@@ -42,7 +50,7 @@ import javafx.collections.ObservableList;
 public class NotificationStore {
 
   private static final NotificationStore INSTANCE = new NotificationStore();
-  private static final String READ_COUNT_KEY = "notifications_read_count";
+  private static final Logger LOGGER = LoggerFactory.getLogger(NotificationStore.class);
 
   /**
    * Danh sách thông báo theo thứ tự thêm vào ngược (thông báo mới nhất ở index 0).
@@ -50,22 +58,16 @@ public class NotificationStore {
    * <p>{@link ObservableList} cho phép UI (ListView, badge...) tự động cập nhật khi list thay đổi
    * mà không cần polling hay callback thủ công.
    */
-  private final ObservableList<String> notifications = FXCollections.observableArrayList();
-
-  private final Preferences preferences = Preferences.userNodeForPackage(NotificationStore.class);
+  private final ObservableList<NotificationItem> notifications =
+      FXCollections.observableArrayList();
 
   /**
-   * Số lượng thông báo chưa đọc — tăng mỗi khi {@link #add} được gọi, reset khi {@link
-   * #markAllRead()} được gọi.
-   *
-   * <p>Exposed dưới dạng {@link ReadOnlyIntegerProperty} qua {@link #unreadCountProperty()} để bên
-   * ngoài có thể observe nhưng không thể set trực tiếp.
+   * Số lượng thông báo chưa đọc — tăng khi item chưa đọc được thêm vào, reset khi {@link
+   * #markAllRead()} thành công.
    */
   private final SimpleIntegerProperty unreadCount = new SimpleIntegerProperty(0);
 
-  private NotificationStore() {
-    refreshUnreadCount();
-  }
+  private NotificationStore() {}
 
   /**
    * Trả về instance duy nhất của {@code NotificationStore}.
@@ -77,26 +79,42 @@ public class NotificationStore {
   }
 
   /**
-   * Thêm một thông báo mới vào đầu danh sách và tăng unread count lên 1.
+   * Thêm một thông báo client-only (WebSocket / local) vào đầu danh sách.
    *
-   * <p>Thông báo mới luôn được chèn tại index 0 để hiển thị ở trên cùng trong UI.
+   * <p>Tạo một {@link NotificationItem} không có server id, chưa đọc, timestamped now, rồi gọi
+   * {@link #add(NotificationItem)}.
    *
-   * <p><b>Thread safety:</b> Method này phải được gọi từ FX thread. Nếu gọi từ background thread,
-   * bọc trong {@code Platform.runLater(() -> NotificationStore.getInstance().add(text))}.
-   *
-   * @param notification nội dung thông báo cần thêm; không được {@code null}
+   * @param notification nội dung thông báo
    */
   public void add(String notification) {
-    // Deduplicate: bo qua neu thong bao giong het da ton tai trong 5 phan tu dau
-    // (phong truong hop loadOfflineNotifications va WebSocket push cung mot thong bao)
+    add(NotificationItem.clientOnly(notification));
+  }
+
+  /**
+   * Thêm một {@link NotificationItem} vào đầu danh sách và tăng unread count nếu chưa đọc.
+   *
+   * <p>Dedup: bỏ qua nếu một item có cùng {@code id} (server-persisted) hoặc cùng {@code message}
+   * (client-only) đã tồn tại trong 5 phần tử đầu.
+   *
+   * <p><b>Thread safety:</b> Phải gọi từ FX thread.
+   *
+   * @param item notification item cần thêm
+   */
+  public void add(NotificationItem item) {
     int checkLimit = Math.min(notifications.size(), 5);
     for (int i = 0; i < checkLimit; i++) {
-      if (notification.equals(notifications.get(i))) {
-        return; // Da co roi, bo qua
+      NotificationItem existing = notifications.get(i);
+      if (item.getId() != null && item.getId().equals(existing.getId())) {
+        return;
+      }
+      if (item.getId() == null && item.getMessage().equals(existing.getMessage())) {
+        return;
       }
     }
-    notifications.add(0, notification);
-    refreshUnreadCount();
+    notifications.add(0, item);
+    if (!item.isRead()) {
+      unreadCount.set(unreadCount.get() + 1);
+    }
   }
 
   /**
@@ -112,9 +130,6 @@ public class NotificationStore {
    * Trả về {@link ReadOnlyIntegerProperty} của unread count — dùng để bind vào UI hoặc đăng ký
    * {@code ChangeListener}.
    *
-   * <p>Ví dụ: {@code SceneManager} lắng nghe property này để cập nhật global notification badge tự
-   * động khi có thông báo mới.
-   *
    * @return read-only property của unread count
    */
   public ReadOnlyIntegerProperty unreadCountProperty() {
@@ -122,43 +137,51 @@ public class NotificationStore {
   }
 
   /**
-   * Đánh dấu tất cả thông báo hiện tại là đã đọc bằng cách reset unread count về 0.
+   * Đánh dấu tất cả thông báo là đã đọc: gọi {@code PATCH /api/notifications/mark-all-read} trên
+   * background thread, sau khi server xác nhận thì cập nhật local state trên FX thread.
    *
-   * <p>Không xóa thông báo khỏi danh sách — người dùng vẫn có thể xem lại lịch sử. Thường được gọi
-   * khi người dùng mở notification panel.
+   * <p>Nếu gọi API thất bại, log warning nhưng không revert — trạng thái sẽ đúng lại ở lần login
+   * tiếp theo.
    */
   public void markAllRead() {
-    preferences.putInt(READ_COUNT_KEY, notifications.size());
-    unreadCount.set(0);
+    Thread.ofVirtual()
+        .start(
+            () -> {
+              try {
+                var response = RestClient.patch("/api/notifications/mark-all-read", null);
+                if (response.statusCode() < 400) {
+                  Platform.runLater(
+                      () -> {
+                        notifications.forEach(item -> item.setRead(true));
+                        unreadCount.set(0);
+                      });
+                } else {
+                  LOGGER.warn("markAllRead: server returned HTTP {}", response.statusCode());
+                }
+              } catch (Exception e) {
+                LOGGER.warn("markAllRead failed: {}", e.getMessage());
+              }
+            });
   }
 
   /**
    * Trả về danh sách thông báo dưới dạng {@link ObservableList} — có thể bind trực tiếp vào {@code
    * ListView} hoặc các control khác trong JavaFX.
    *
-   * <p>Caller không nên modify list trả về trực tiếp; dùng {@link #add} và {@link #clear} thay thế
-   * để đảm bảo unread count luôn đồng bộ.
-   *
-   * @return observable list các thông báo, index 0 là thông báo mới nhất
+   * @return observable list các {@link NotificationItem}, index 0 là thông báo mới nhất
    */
-  public ObservableList<String> getNotifications() {
+  public ObservableList<NotificationItem> getNotifications() {
     return notifications;
   }
 
   /**
-   * Xóa toàn bộ thông báo và reset unread count về 0.
+   * Xóa toàn bộ thông báo trong bộ nhớ và reset unread count về 0.
    *
-   * <p>Được gọi bởi {@link com.auction.ui.util.SceneManager#logout()} khi người dùng đăng xuất, đảm
-   * bảo phiên mới không nhìn thấy thông báo của phiên cũ.
+   * <p>Không ghi bất kỳ giá trị nào vào {@code Preferences}. Được gọi bởi {@link
+   * com.auction.ui.util.SceneManager#logout()} khi người dùng đăng xuất.
    */
   public void clear() {
     notifications.clear();
-    preferences.putInt(READ_COUNT_KEY, 0);
     unreadCount.set(0);
-  }
-
-  private void refreshUnreadCount() {
-    int savedReadCount = preferences.getInt(READ_COUNT_KEY, 0);
-    unreadCount.set(Math.max(0, notifications.size() - savedReadCount));
   }
 }
