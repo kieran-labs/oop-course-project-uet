@@ -111,6 +111,11 @@ public class BidService {
                 }
                 auctionRef.set(auction);
 
+                if (!isAutoBid && autoBidConfigDao.hasActiveConfig(handle, auctionId, bidderId)) {
+                  throw new InvalidBidException(
+                      "Bạn đang bật auto-bid cho phiên này. Hãy tắt auto-bid trước khi đặt giá thủ công.");
+                }
+
                 // 2. State pattern: kiểm tra amount > currentPrice, bidderId != sellerId,
                 // và cập nhật auction trong bộ nhớ. Ném exception nếu không hợp lệ.
                 Long previousLeaderId = auction.getLeadingBidderId();

@@ -270,6 +270,43 @@ class BidServiceTest {
           () -> bidService.placeBid(AUCTION_ID, BIDDER_ID, equalBid, false),
           "Bid bằng giá hiện tại không hợp lệ — phải bid CAO HƠN");
     }
+
+    @Test
+    @DisplayName("ACTIVE auto-bid chặn manual bid")
+    void testManualBidRejectedWhenActiveAutoBidExists() {
+      when(autoBidConfigDao.hasActiveConfig(mockHandle, AUCTION_ID, BIDDER_ID)).thenReturn(true);
+
+      assertThrows(
+          InvalidBidException.class,
+          () -> bidService.placeBid(AUCTION_ID, BIDDER_ID, new BigDecimal("2000000"), false),
+          "Manual bid phải bị chặn khi bidder đang có auto-bid ACTIVE");
+
+      verify(auctionDao, never()).updateInTransaction(any(), any());
+      verify(bidTransactionDao, never()).insert(any(), any());
+    }
+
+    @Test
+    @DisplayName("STOPPED/EXHAUSTED/FAILED auto-bid không chặn manual bid")
+    void testManualBidAllowedWhenNoActiveAutoBidExists() {
+      when(autoBidConfigDao.hasActiveConfig(mockHandle, AUCTION_ID, BIDDER_ID)).thenReturn(false);
+
+      bidService.placeBid(AUCTION_ID, BIDDER_ID, new BigDecimal("2000000"), false);
+
+      verify(auctionDao).updateInTransaction(eq(mockHandle), any(Auction.class));
+      verify(bidTransactionDao).insert(eq(mockHandle), any(BidTransaction.class));
+    }
+
+    @Test
+    @DisplayName("Auto-bid generated bid không bị guard manual bid chặn")
+    void testAutoBidGeneratedBidBypassesManualAutoBidGuard() {
+      when(autoBidConfigDao.hasActiveConfig(mockHandle, AUCTION_ID, BIDDER_ID)).thenReturn(true);
+
+      bidService.placeBid(AUCTION_ID, BIDDER_ID, new BigDecimal("2000000"), true);
+
+      verify(autoBidConfigDao, never()).hasActiveConfig(mockHandle, AUCTION_ID, BIDDER_ID);
+      verify(auctionDao).updateInTransaction(eq(mockHandle), any(Auction.class));
+      verify(bidTransactionDao).insert(eq(mockHandle), any(BidTransaction.class));
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
