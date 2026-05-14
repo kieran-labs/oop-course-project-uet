@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.auction.config.DatabaseConfig;
 import com.auction.dao.AuctionDao;
+import com.auction.dao.AutoBidConfigDao;
+import com.auction.dao.BidTransactionDao;
 import com.auction.dao.ItemDao;
 import com.auction.dao.UserDao;
 import com.auction.model.Auction;
@@ -13,6 +15,7 @@ import com.auction.model.Item;
 import com.auction.model.Seller;
 import com.auction.model.User;
 import com.auction.pattern.observer.AuctionEventManager;
+import com.auction.pattern.strategy.AutoBidStrategy;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -30,6 +33,7 @@ class AuctionSchedulerSettlementTest {
   private static ItemDao itemDao;
   private static AuctionDao auctionDao;
   private static AuctionScheduler scheduler;
+  private static BidService bidService;
 
   private User seller;
   private User bidder;
@@ -45,7 +49,23 @@ class AuctionSchedulerSettlementTest {
     userDao = new UserDao(jdbi);
     itemDao = new ItemDao(jdbi);
     auctionDao = new AuctionDao(jdbi);
-    scheduler = new AuctionScheduler(auctionDao, userDao, itemDao, new AuctionEventManager(), jdbi);
+    AutoBidConfigDao autoBidConfigDao = new AutoBidConfigDao(jdbi);
+    BidTransactionDao bidTransactionDao = new BidTransactionDao(jdbi);
+    AuctionEventManager eventManager = new AuctionEventManager();
+    AuctionService auctionService =
+        new AuctionService(auctionDao, itemDao, userDao, eventManager, jdbi);
+    AutoBidStrategy autoBidStrategy = new AutoBidStrategy(autoBidConfigDao);
+    scheduler = new AuctionScheduler(auctionDao, userDao, itemDao, eventManager, jdbi);
+    bidService =
+        new BidService(
+            auctionDao,
+            bidTransactionDao,
+            autoBidConfigDao,
+            eventManager,
+            jdbi,
+            auctionService,
+            userDao,
+            autoBidStrategy);
   }
 
   @BeforeEach
@@ -114,6 +134,27 @@ class AuctionSchedulerSettlementTest {
     assertEquals(AuctionStatus.PAID, foundAuction.getStatus());
   }
 
+  @Test
+  @DisplayName("Scheduler không settle sớm khi bid cuối giờ đã gia hạn anti-snipe")
+  void settlingClaimRespectsAntiSnipeExtension() throws Exception {
+    LocalDateTime scanNow = LocalDateTime.now();
+    User antiSnipeBidder = createBidder("anti_snipe_bidder", new BigDecimal("1000000"));
+    Auction auction =
+        createRunningAuction(
+            "Anti Snipe Item", null, new BigDecimal("100000"), scanNow.minusSeconds(1));
+
+    bidService.placeBid(auction.getId(), antiSnipeBidder.getId(), new BigDecimal("200000"), false);
+    invokeSettleAndClose(auction.getId(), scanNow);
+
+    Auction foundAuction = auctionDao.findById(auction.getId()).orElseThrow();
+    User foundBidder = userDao.findById(antiSnipeBidder.getId()).orElseThrow();
+
+    assertEquals(AuctionStatus.RUNNING, foundAuction.getStatus());
+    assertEquals(antiSnipeBidder.getId(), foundAuction.getLeadingBidderId());
+    assertEquals(0, new BigDecimal("200000").compareTo(foundAuction.getCurrentPrice()));
+    assertEquals(0, new BigDecimal("200000").compareTo(foundBidder.getReservedBalance()));
+  }
+
   private void reserveBidderBalance(BigDecimal amount) {
     reserveBalance(bidder.getId(), amount);
   }
@@ -128,13 +169,15 @@ class AuctionSchedulerSettlementTest {
   }
 
   private Auction createRunningAuction(String itemName, Long leaderId, BigDecimal currentPrice) {
+    return createRunningAuction(
+        itemName, leaderId, currentPrice, LocalDateTime.now().minusMinutes(1));
+  }
+
+  private Auction createRunningAuction(
+      String itemName, Long leaderId, BigDecimal currentPrice, LocalDateTime endTime) {
     Item item = itemDao.insert(new Item(itemName, "Settlement test item", seller.getId(), "ART"));
     Auction auction =
-        new Auction(
-            item.getId(),
-            currentPrice,
-            LocalDateTime.now().minusHours(2),
-            LocalDateTime.now().minusMinutes(1));
+        new Auction(item.getId(), currentPrice, LocalDateTime.now().minusHours(2), endTime);
     auction.setSellerId(seller.getId());
     auction.setCurrentPrice(currentPrice);
     auction.setLeadingBidderId(leaderId);
@@ -172,8 +215,13 @@ class AuctionSchedulerSettlementTest {
   }
 
   private void invokeSettleAndClose(Long auctionId) throws Exception {
-    Method settleAndClose = AuctionScheduler.class.getDeclaredMethod("settleAndClose", Long.class);
+    invokeSettleAndClose(auctionId, LocalDateTime.now());
+  }
+
+  private void invokeSettleAndClose(Long auctionId, LocalDateTime now) throws Exception {
+    Method settleAndClose =
+        AuctionScheduler.class.getDeclaredMethod("settleAndClose", Long.class, LocalDateTime.class);
     settleAndClose.setAccessible(true);
-    settleAndClose.invoke(scheduler, auctionId);
+    settleAndClose.invoke(scheduler, auctionId, now);
   }
 }

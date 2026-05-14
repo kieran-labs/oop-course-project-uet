@@ -196,7 +196,7 @@ public class AuctionScheduler {
     List<Long> ids = auctionDao.findExpiredAuctionIds("RUNNING", now);
     for (Long id : ids) {
       try {
-        settleAndClose(id).ifPresent(this::notifyAuctionEnded);
+        settleAndClose(id, now).ifPresent(this::notifyAuctionEnded);
       } catch (Exception e) {
         LOG.error("Không thể kết thúc phiên #{}", id, e);
       }
@@ -207,7 +207,7 @@ public class AuctionScheduler {
    * Thanh toán và đóng phiên: - Nếu có người thắng: trừ tiền bidder, cộng tiền seller, status →
    * PAID. - Nếu không ai bid: status → FINISHED.
    */
-  private Optional<Auction> settleAndClose(Long auctionId) {
+  private Optional<Auction> settleAndClose(Long auctionId, LocalDateTime now) {
     MDC.put("auctionId", String.valueOf(auctionId));
     try {
       final Auction[] settledAuction = new Auction[1];
@@ -219,12 +219,16 @@ public class AuctionScheduler {
                         """
                         UPDATE auctions
                         SET status = 'SETTLING', updated_at = NOW()
-                        WHERE id = :id AND status = 'RUNNING'
+                        WHERE id = :id AND status = 'RUNNING' AND end_time <= :now
                         """)
                     .bind("id", auctionId)
+                    .bind("now", now)
                     .execute();
             if (claimed == 0) {
-              LOG.warn("Phiên #{} đã được settle bởi thread/process khác, bỏ qua", auctionId);
+              LOG.info(
+                  "Phiên #{} chưa đủ điều kiện SETTLING tại {}, có thể đã được gia hạn hoặc xử lý trước đó",
+                  auctionId,
+                  now);
               return;
             }
 
