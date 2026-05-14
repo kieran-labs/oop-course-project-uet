@@ -17,9 +17,9 @@ import com.auction.model.User;
 import com.auction.pattern.observer.AuctionEventManager;
 import com.auction.pattern.strategy.AutoBidStrategy;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,13 +38,16 @@ import org.slf4j.MDC;
  *      c. Chống snipe: nếu còn &lt; 30s → gia hạn 60s
  *      d. updateInTransaction → lưu giá + endTime nguyên tử
  *      e. bidTransactionDao.insert(handle) → ghi bid trong cùng transaction
- *   3. Thông báo TIME_EXTENDED nếu chống snipe được kích hoạt
- *   4. Thông báo BID_UPDATE qua WebSocket
- *   5. triggerAutoBid() nếu là đặt giá thủ công
+ *      f. Nếu là manual bid: executeAllInTransaction → toàn bộ chain auto-bid trong cùng handle
+ *   3. Sau commit: phát WebSocket events (BID_UPDATE, TIME_EXTENDED)
  * </pre>
  *
- * <p><b>Xử lý đồng thời:</b> {@code SELECT FOR UPDATE} trong transaction bảo vệ khi nhiều server
- * instance chạy song song. Không cần {@code synchronized} trong ứng dụng.
+ * <p><b>Tính nguyên tử của auto-bid chain:</b> Manual bid + toàn bộ chuỗi auto-bid chạy trong một
+ * {@code jdbi.inTransaction()}. Nếu bất kỳ bước nào trong chain gặp lỗi bất ngờ, toàn bộ
+ * transaction rollback — không có partial commit. EXHAUSTED và FAILED là trạng thái hợp lệ, được
+ * commit cùng transaction.
+ *
+ * <p><b>WebSocket events:</b> Được phát SAU KHI transaction commit thành công, không trước.
  */
 public class BidService {
 
@@ -84,8 +87,11 @@ public class BidService {
   /**
    * Đặt giá cho một phiên đấu giá.
    *
+   * <p>Nếu là manual bid: sau khi bid thành công, toàn bộ chuỗi auto-bid phản ứng chạy trong CÙNG
+   * transaction. WebSocket events được phát sau khi transaction commit.
+   *
    * @param auctionId ID phiên đấu giá
-   * @param bidderId ID người đặt giá (lấy từ JWT token)
+   * @param bidderId ID người đặt giá
    * @param amount số tiền đặt giá (phải lớn hơn giá hiện tại)
    * @param isAutoBid {@code true} nếu đây là đặt giá tự động
    * @return BidTransaction đã được lưu vào cơ sở dữ liệu
@@ -95,44 +101,38 @@ public class BidService {
     MDC.put("auctionId", String.valueOf(auctionId));
     MDC.put("userId", String.valueOf(bidderId));
     try {
-
       if (amount == null || amount.signum() <= 0) {
         throw new InvalidBidException("Giá bid phải lớn hơn 0");
       }
 
-      AtomicReference<Auction> auctionRef = new AtomicReference<>();
-      AtomicBoolean antiSnipeTriggered = new AtomicBoolean(false);
+      List<Runnable> postCommitEvents = new ArrayList<>();
 
       BidTransaction savedTransaction =
           jdbi.inTransaction(
               handle -> {
-                // 1. Khóa row auction trước để mọi bid trên cùng phiên được serialize.
                 Auction auction;
                 try {
                   auction = auctionDao.findByIdForUpdate(handle, auctionId);
                 } catch (IllegalStateException e) {
                   throw new NotFoundException("Không tìm thấy phiên đấu giá với id: " + auctionId);
                 }
-                auctionRef.set(auction);
 
                 if (!isAutoBid && autoBidConfigDao.hasActiveConfig(handle, auctionId, bidderId)) {
                   throw new InvalidBidException(
-                      "Bạn đang bật auto-bid cho phiên này. Hãy tắt auto-bid trước khi đặt giá thủ công.");
+                      "Bạn đang bật auto-bid cho phiên này."
+                          + " Hãy tắt auto-bid trước khi đặt giá thủ công.");
                 }
 
-                // 2. State pattern: kiểm tra amount > currentPrice, bidderId != sellerId,
-                // và cập nhật auction trong bộ nhớ. Ném exception nếu không hợp lệ.
                 Long previousLeaderId = auction.getLeadingBidderId();
                 BigDecimal previousPrice = auction.getCurrentPrice();
                 auctionService.getState(auction).placeBid(auction, amount, bidderId);
 
-                // 3. Khóa bidder để kiểm tra phần balance còn khả dụng sau các khoản đang giữ.
                 User bidder = userDao.findByIdForUpdate(handle, bidderId);
-                BigDecimal availableBalance = bidder.getAvailableBalance();
-                if (availableBalance.compareTo(amount) < 0) {
+                BigDecimal available = bidder.getAvailableBalance();
+                if (available.compareTo(amount) < 0) {
                   throw new InvalidBidException(
                       "Số dư khả dụng không đủ. Số dư khả dụng hiện tại: "
-                          + availableBalance
+                          + available
                           + ", giá bid: "
                           + amount
                           + ". Vui lòng nạp thêm tiền.");
@@ -141,59 +141,62 @@ public class BidService {
                 if (auction.getRemainingTimeMs() < ANTI_SNIPE_THRESHOLD_MS) {
                   auction.setEndTime(
                       auction.getEndTime().plusSeconds(ANTI_SNIPE_EXTENSION_SECONDS));
-                  antiSnipeTriggered.set(true);
+                  final Auction snap = auction;
+                  postCommitEvents.add(
+                      () -> {
+                        eventManager.notifyTimeExtended(
+                            auctionId, BidUpdateMessage.timeExtended(auctionId, snap.getEndTime()));
+                        LOGGER.info(
+                            "Chống snipe kích hoạt cho phiên #{}: gia hạn thêm {}s",
+                            auctionId,
+                            ANTI_SNIPE_EXTENSION_SECONDS);
+                      });
                 }
 
-                // 4. Release khoản giữ của người dẫn đầu cũ, rồi giữ tiền cho người dẫn đầu mới.
                 if (previousLeaderId != null) {
                   userDao.releaseReservedBalanceInTransaction(
                       handle, previousLeaderId, previousPrice);
                 }
                 userDao.updateReservedBalanceInTransaction(handle, bidderId, amount);
-
-                // 5. Ghi nguyên tử: lưu cả cập nhật giá lẫn gia hạn endTime (nếu có) trong một lần
                 auctionDao.updateInTransaction(handle, auction);
 
-                // 6. Lưu thông báo cho người bị vượt giá (nếu có và không phải chính mình)
                 if (previousLeaderId != null && !previousLeaderId.equals(bidderId)) {
-                  String outbidMsg =
+                  handle.execute(
+                      "INSERT INTO notifications (user_id, message, notification_type)"
+                          + " VALUES (?, ?, 'OUTBID')",
+                      previousLeaderId,
                       String.format(
                           "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VNĐ",
-                          auctionId, amount.longValue());
-                  handle.execute(
-                      "INSERT INTO notifications (user_id, message, notification_type) VALUES (?, ?, 'OUTBID')",
-                      previousLeaderId,
-                      outbidMsg);
+                          auctionId, amount.longValue()));
                 }
 
                 BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, isAutoBid);
-                return bidTransactionDao.insert(handle, tx);
+                BidTransaction saved = bidTransactionDao.insert(handle, tx);
+
+                final Auction auctionSnap = auction;
+                postCommitEvents.add(
+                    () -> notifyBidUpdate(auctionSnap, auctionId, bidderId, amount, isAutoBid));
+
+                if (!isAutoBid) {
+                  autoBidStrategy.executeAllInTransaction(
+                      handle,
+                      auctionId,
+                      amount,
+                      bidderId,
+                      (h, aid, bid, amt) ->
+                          executeChainBidInHandle(h, aid, bid, amt, postCommitEvents));
+                }
+
+                LOGGER.info(
+                    "Bid đặt thành công: auction={}, bidder={}, amount={}, autoBid={}",
+                    auctionId,
+                    bidderId,
+                    amount,
+                    isAutoBid);
+                return saved;
               });
 
-      Auction auction = auctionRef.get();
-
-      LOGGER.info(
-          "Bid đặt thành công: auction={}, bidder={}, amount={}, autoBid={}",
-          auctionId,
-          bidderId,
-          amount,
-          isAutoBid);
-
-      if (antiSnipeTriggered.get()) {
-        BidUpdateMessage timeMsg = BidUpdateMessage.timeExtended(auctionId, auction.getEndTime());
-        eventManager.notifyTimeExtended(auctionId, timeMsg);
-        LOGGER.info(
-            "Chống snipe kích hoạt cho phiên #{}: gia hạn thêm {}s",
-            auctionId,
-            ANTI_SNIPE_EXTENSION_SECONDS);
-      }
-
-      notifyBidUpdate(auction, auctionId, bidderId, amount, isAutoBid);
-
-      if (!isAutoBid) {
-        triggerAutoBid(auctionId, amount, bidderId);
-      }
-
+      postCommitEvents.forEach(Runnable::run);
       return savedTransaction;
     } finally {
       MDC.clear();
@@ -217,7 +220,8 @@ public class BidService {
   /**
    * Tạo cấu hình auto-bid và đặt giá ban đầu nguyên tử trong một transaction.
    *
-   * <p><b>Luồng xử lý:</b>
+   * <p>Sau khi đặt giá ban đầu thành công, toàn bộ chuỗi auto-bid phản ứng cũng chạy trong cùng
+   * transaction. WebSocket events được phát sau commit.
    *
    * <ol>
    *   <li>Lock auction (SELECT FOR UPDATE).
@@ -227,7 +231,7 @@ public class BidService {
    *   <li>initialBid = currentPrice + increment.
    *   <li>Nếu initialBid > maxBid → tạo config EXHAUSTED, không bid.
    *   <li>Nếu balance không đủ initialBid → tạo config FAILED, không bid.
-   *   <li>Ngược lại → tạo config ACTIVE, insert BidTransaction, freeze initialBid.
+   *   <li>Ngược lại → tạo config ACTIVE, insert BidTransaction, freeze initialBid, run chain.
    * </ol>
    *
    * @param auctionId ID phiên đấu giá
@@ -248,9 +252,7 @@ public class BidService {
         throw new InvalidBidException("maxBid phải lớn hơn 0");
       }
 
-      AtomicReference<Auction> auctionRef = new AtomicReference<>();
-      AtomicBoolean antiSnipeTriggered = new AtomicBoolean(false);
-      AtomicBoolean bidPlaced = new AtomicBoolean(false);
+      List<Runnable> postCommitEvents = new ArrayList<>();
 
       AutoBidConfig savedConfig =
           jdbi.inTransaction(
@@ -261,7 +263,6 @@ public class BidService {
                 } catch (IllegalStateException e) {
                   throw new NotFoundException("Không tìm thấy phiên đấu giá: " + auctionId);
                 }
-                auctionRef.set(auction);
 
                 if (auction.getStatus() != AuctionStatus.RUNNING) {
                   throw new InvalidBidException(
@@ -326,7 +327,12 @@ public class BidService {
                 if (auction.getRemainingTimeMs() < ANTI_SNIPE_THRESHOLD_MS) {
                   auction.setEndTime(
                       auction.getEndTime().plusSeconds(ANTI_SNIPE_EXTENSION_SECONDS));
-                  antiSnipeTriggered.set(true);
+                  final Auction snap = auction;
+                  postCommitEvents.add(
+                      () ->
+                          eventManager.notifyTimeExtended(
+                              auctionId,
+                              BidUpdateMessage.timeExtended(auctionId, snap.getEndTime())));
                 }
 
                 if (previousLeaderId != null) {
@@ -334,7 +340,6 @@ public class BidService {
                       handle, previousLeaderId, previousPrice);
                 }
                 userDao.updateReservedBalanceInTransaction(handle, bidderId, initialBid);
-
                 auctionDao.updateInTransaction(handle, auction);
 
                 if (previousLeaderId != null && !previousLeaderId.equals(bidderId)) {
@@ -353,20 +358,23 @@ public class BidService {
                 AutoBidConfig config = new AutoBidConfig(auctionId, bidderId, maxBid, increment);
                 autoBidConfigDao.upsertInTransaction(handle, config);
 
-                bidPlaced.set(true);
+                final Auction auctionSnap = auction;
+                final BigDecimal initialBidSnap = initialBid;
+                postCommitEvents.add(
+                    () -> notifyBidUpdate(auctionSnap, auctionId, bidderId, initialBidSnap, true));
+
+                autoBidStrategy.executeAllInTransaction(
+                    handle,
+                    auctionId,
+                    initialBid,
+                    bidderId,
+                    (h, aid, bid, amt) ->
+                        executeChainBidInHandle(h, aid, bid, amt, postCommitEvents));
+
                 return config;
               });
 
-      if (bidPlaced.get()) {
-        Auction auction = auctionRef.get();
-        if (antiSnipeTriggered.get()) {
-          BidUpdateMessage timeMsg = BidUpdateMessage.timeExtended(auctionId, auction.getEndTime());
-          eventManager.notifyTimeExtended(auctionId, timeMsg);
-        }
-        notifyBidUpdate(auction, auctionId, bidderId, auction.getCurrentPrice(), true);
-        triggerAutoBid(auctionId, auction.getCurrentPrice(), bidderId);
-      }
-
+      postCommitEvents.forEach(Runnable::run);
       return savedConfig;
     } finally {
       MDC.clear();
@@ -374,6 +382,65 @@ public class BidService {
   }
 
   // ── Phương thức nội bộ ────────────────────────────────────
+
+  /**
+   * Thực thi một bước auto-bid trong transaction đang mở.
+   *
+   * <p>Phương thức này được {@code AutoBidStrategy.executeAllInTransaction} gọi cho mỗi bước chain.
+   * Balance đã được pre-check ở strategy layer; phương thức này chịu trách nhiệm: validate giá,
+   * anti-snipe, reserve/release balance, ghi auction và bid transaction. Post-commit events được
+   * đẩy vào {@code postCommitEvents} để phát sau khi transaction commit.
+   */
+  BidTransaction executeChainBidInHandle(
+      Handle handle,
+      Long auctionId,
+      Long bidderId,
+      BigDecimal amount,
+      List<Runnable> postCommitEvents) {
+
+    Auction auction;
+    try {
+      auction = auctionDao.findByIdForUpdate(handle, auctionId);
+    } catch (IllegalStateException e) {
+      throw new NotFoundException("Không tìm thấy phiên đấu giá: " + auctionId);
+    }
+
+    Long previousLeaderId = auction.getLeadingBidderId();
+    BigDecimal previousPrice = auction.getCurrentPrice();
+    auctionService.getState(auction).placeBid(auction, amount, bidderId);
+
+    if (auction.getRemainingTimeMs() < ANTI_SNIPE_THRESHOLD_MS) {
+      auction.setEndTime(auction.getEndTime().plusSeconds(ANTI_SNIPE_EXTENSION_SECONDS));
+      final Auction snap = auction;
+      postCommitEvents.add(
+          () ->
+              eventManager.notifyTimeExtended(
+                  auctionId, BidUpdateMessage.timeExtended(auctionId, snap.getEndTime())));
+    }
+
+    if (previousLeaderId != null) {
+      userDao.releaseReservedBalanceInTransaction(handle, previousLeaderId, previousPrice);
+    }
+    userDao.updateReservedBalanceInTransaction(handle, bidderId, amount);
+    auctionDao.updateInTransaction(handle, auction);
+
+    if (previousLeaderId != null && !previousLeaderId.equals(bidderId)) {
+      handle.execute(
+          "INSERT INTO notifications (user_id, message, notification_type) VALUES (?, ?, 'OUTBID')",
+          previousLeaderId,
+          String.format(
+              "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VNĐ",
+              auctionId, amount.longValue()));
+    }
+
+    BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, true);
+    BidTransaction saved = bidTransactionDao.insert(handle, tx);
+
+    final Auction auctionSnap = auction;
+    postCommitEvents.add(() -> notifyBidUpdate(auctionSnap, auctionId, bidderId, amount, true));
+
+    return saved;
+  }
 
   private void notifyBidUpdate(
       Auction auction, Long auctionId, Long bidderId, BigDecimal amount, boolean isAutoBid) {
@@ -385,18 +452,6 @@ public class BidService {
       eventManager.notifyBidUpdate(auctionId, msg);
     } catch (Exception e) {
       LOGGER.error("Lỗi khi gửi thông báo BID_UPDATE cho phiên #{}: {}", auctionId, e.getMessage());
-    }
-  }
-
-  private void triggerAutoBid(Long auctionId, BigDecimal currentPrice, Long leadingBidderId) {
-    try {
-      autoBidStrategy.executeAll(
-          auctionId,
-          currentPrice,
-          leadingBidderId,
-          (aid, bid, amt) -> this.placeBid(aid, bid, amt, true));
-    } catch (Exception e) {
-      LOGGER.error("Lỗi khi xử lý đặt giá tự động cho phiên #{}: {}", auctionId, e.getMessage());
     }
   }
 }

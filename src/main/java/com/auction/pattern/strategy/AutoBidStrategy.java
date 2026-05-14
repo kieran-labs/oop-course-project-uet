@@ -1,12 +1,14 @@
 package com.auction.pattern.strategy;
 
 import com.auction.dao.AutoBidConfigDao;
+import com.auction.dao.UserDao;
 import com.auction.exception.InvalidBidException;
 import com.auction.model.Auction;
 import com.auction.model.AutoBidConfig;
 import com.auction.model.AutoBidFailureReason;
 import com.auction.model.AutoBidStatus;
 import com.auction.model.BidTransaction;
+import com.auction.model.User;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -14,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
+import org.jdbi.v3.core.Handle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,9 +70,10 @@ public class AutoBidStrategy implements BidStrategy {
   private static final Logger LOGGER = LoggerFactory.getLogger(AutoBidStrategy.class);
 
   /** Giới hạn số lần auto-bid liên tiếp, tránh vòng lặp vô hạn. */
-  private static final int MAX_AUTO_BIDS_PER_TRIGGER = 10;
+  public static final int MAX_AUTO_BIDS_PER_TRIGGER = 100;
 
   private final AutoBidConfigDao autoBidConfigDao;
+  private final UserDao userDao;
 
   /**
    * Functional interface để tránh circular dependency với BidService.
@@ -90,8 +94,18 @@ public class AutoBidStrategy implements BidStrategy {
     BidTransaction execute(Long auctionId, Long bidderId, BigDecimal amount);
   }
 
-  public AutoBidStrategy(AutoBidConfigDao autoBidConfigDao) {
+  /**
+   * Functional interface cho executor chạy trong transaction đang mở. Khác với {@link
+   * AutoBidExecutor}: nhận thêm {@link Handle} để thực thi trong cùng transaction.
+   */
+  @FunctionalInterface
+  public interface InTransactionBidExecutor {
+    BidTransaction execute(Handle handle, Long auctionId, Long bidderId, BigDecimal amount);
+  }
+
+  public AutoBidStrategy(AutoBidConfigDao autoBidConfigDao, UserDao userDao) {
     this.autoBidConfigDao = autoBidConfigDao;
+    this.userDao = userDao;
   }
 
   /**
@@ -245,6 +259,131 @@ public class AutoBidStrategy implements BidStrategy {
       } catch (Exception e) {
         LOGGER.warn("Auto-bid thất bại cho bidder={}: {}", config.getBidderId(), e.getMessage());
       }
+    }
+
+    if (autoBidCount >= MAX_AUTO_BIDS_PER_TRIGGER) {
+      LOGGER.warn("Đạt giới hạn {} auto-bid cho phiên #{}", MAX_AUTO_BIDS_PER_TRIGGER, auctionId);
+    }
+  }
+
+  /**
+   * Thực thi toàn bộ chuỗi auto-bid trong cùng một transaction đang mở.
+   *
+   * <p>Mọi thao tác (đọc config, đọc balance, ghi bid, cập nhật trạng thái config, ghi thông báo)
+   * đều dùng {@code handle} được truyền vào — không mở connection hoặc transaction mới. Điều này
+   * đảm bảo tính nguyên tử: nếu có lỗi bất ngờ, toàn bộ chain sẽ rollback cùng với manual bid.
+   *
+   * <p><b>EXHAUSTED:</b> khi {@code nextBid > maxBid}, config bị đánh dấu EXHAUSTED và người dùng
+   * nhận thông báo trong cùng transaction. Chain tiếp tục với các config khác.
+   *
+   * <p><b>FAILED:</b> khi balance không đủ {@code nextBid}, config bị đánh dấu FAILED và người dùng
+   * nhận thông báo. Chain tiếp tục.
+   *
+   * <p>Exception bất ngờ từ executor KHÔNG bị nuốt — chúng sẽ propagate và gây rollback toàn bộ
+   * transaction.
+   *
+   * @param handle JDBI handle của transaction đang mở
+   * @param auctionId ID phiên đấu giá
+   * @param currentPriceAfterBid giá sau bid vừa xảy ra
+   * @param initialLeaderId ID người đang dẫn đầu
+   * @param executor callback thực thi một lần auto-bid trong transaction
+   */
+  public void executeAllInTransaction(
+      Handle handle,
+      Long auctionId,
+      BigDecimal currentPriceAfterBid,
+      Long initialLeaderId,
+      InTransactionBidExecutor executor) {
+
+    List<AutoBidConfig> activeConfigs =
+        autoBidConfigDao.findActiveByAuctionIdInTransaction(handle, auctionId);
+
+    PriorityQueue<AutoBidConfig> queue =
+        new PriorityQueue<>(Comparator.comparing(AutoBidConfig::getRegisteredAt));
+    queue.addAll(activeConfigs);
+
+    int autoBidCount = 0;
+    BigDecimal currentPrice = currentPriceAfterBid;
+    Long currentLeaderId = initialLeaderId;
+    Set<Long> skippedAsLeader = new HashSet<>();
+    List<AutoBidConfig> skippedLeaderConfigs = new ArrayList<>();
+
+    while (!queue.isEmpty() && autoBidCount < MAX_AUTO_BIDS_PER_TRIGGER) {
+      AutoBidConfig config = queue.poll();
+      AutoBidConfig fresh =
+          autoBidConfigDao.findByIdInTransaction(handle, config.getId()).orElse(null);
+      if (fresh == null || !fresh.isActive()) {
+        LOGGER.info("Auto-bid config #{} deactivated mid-chain — skipping", config.getId());
+        continue;
+      }
+      config = fresh;
+
+      if (config.getBidderId().equals(currentLeaderId)) {
+        if (skippedAsLeader.add(config.getBidderId())) {
+          skippedLeaderConfigs.add(config);
+        }
+        continue;
+      }
+
+      if (!config.canBidAt(currentPrice)) {
+        config.setStatus(AutoBidStatus.EXHAUSTED);
+        config.setFailureReason(AutoBidFailureReason.MAX_PRICE_TOO_LOW);
+        autoBidConfigDao.updateStatusInTransaction(handle, config);
+        handle.execute(
+            "INSERT INTO notifications (user_id, message, notification_type)"
+                + " VALUES (?, ?, 'AUTOBID_EXHAUSTED')",
+            config.getBidderId(),
+            String.format(
+                "Auto-bid của bạn cho phiên #%d đã hết hạn mức:"
+                    + " maxBid không đủ để tiếp tục (giá hiện tại: %,d VNĐ)",
+                auctionId, currentPrice.longValue()));
+        LOGGER.info("Auto-bid EXHAUSTED: bidder={}, auction={}", config.getBidderId(), auctionId);
+        for (AutoBidConfig skipped : skippedLeaderConfigs) {
+          queue.offer(skipped);
+        }
+        skippedAsLeader.clear();
+        skippedLeaderConfigs.clear();
+        continue;
+      }
+
+      BigDecimal nextAmount = config.getNextBidAmount(currentPrice);
+
+      User bidder = userDao.findByIdForUpdate(handle, config.getBidderId());
+      if (bidder.getAvailableBalance().compareTo(nextAmount) < 0) {
+        config.setStatus(AutoBidStatus.FAILED);
+        config.setFailureReason(AutoBidFailureReason.INSUFFICIENT_BALANCE);
+        autoBidConfigDao.updateStatusInTransaction(handle, config);
+        handle.execute(
+            "INSERT INTO notifications (user_id, message, notification_type)"
+                + " VALUES (?, ?, 'AUTOBID_FAILED')",
+            config.getBidderId(),
+            String.format(
+                "Auto-bid của bạn cho phiên #%d thất bại: số dư không đủ."
+                    + " Cần %,d VNĐ, có %,d VNĐ",
+                auctionId, nextAmount.longValue(), bidder.getAvailableBalance().longValue()));
+        LOGGER.info(
+            "Auto-bid FAILED (balance): bidder={}, auction={}", config.getBidderId(), auctionId);
+        for (AutoBidConfig skipped : skippedLeaderConfigs) {
+          queue.offer(skipped);
+        }
+        skippedAsLeader.clear();
+        skippedLeaderConfigs.clear();
+        continue;
+      }
+
+      executor.execute(handle, auctionId, config.getBidderId(), nextAmount);
+      currentPrice = nextAmount;
+      currentLeaderId = config.getBidderId();
+      autoBidCount++;
+      skippedAsLeader.clear();
+      queue.offer(config);
+      queue.addAll(skippedLeaderConfigs);
+      skippedLeaderConfigs.clear();
+      LOGGER.info(
+          "Auto-bid thành công: bidder={}, amount={}, phiên={}",
+          config.getBidderId(),
+          nextAmount,
+          auctionId);
     }
 
     if (autoBidCount >= MAX_AUTO_BIDS_PER_TRIGGER) {

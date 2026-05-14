@@ -129,7 +129,7 @@ public class App {
     var passwordResetService = new PasswordResetService(userDao, passwordResetRequestDao, jdbi);
     var itemService = new ItemService(itemDao);
     var auctionService = new AuctionService(auctionDao, itemDao, userDao, eventManager, jdbi);
-    var autoBidStrategy = new AutoBidStrategy(autoBidConfigDao);
+    var autoBidStrategy = new AutoBidStrategy(autoBidConfigDao, userDao);
     var bidService =
         new BidService(
             auctionDao,
