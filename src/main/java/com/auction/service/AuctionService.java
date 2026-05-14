@@ -394,7 +394,8 @@ public class AuctionService {
   public AuctionState getState(Auction auction) {
     return switch (auction.getStatus()) {
       case OPEN -> AuctionStates.OPEN;
-      case RUNNING, SETTLING -> AuctionStates.RUNNING;
+      case RUNNING -> AuctionStates.RUNNING;
+      case SETTLING -> AuctionStates.SETTLING;
       case FINISHED -> AuctionStates.FINISHED;
       case PAID -> AuctionStates.PAID;
       case CANCELED -> AuctionStates.CANCELED;

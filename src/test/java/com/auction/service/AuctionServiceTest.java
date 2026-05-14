@@ -17,6 +17,8 @@ import com.auction.exception.NotFoundException;
 import com.auction.model.Auction;
 import com.auction.model.AuctionStatus;
 import com.auction.model.Item;
+import com.auction.pattern.state.AuctionState;
+import com.auction.pattern.state.SettlingState;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -289,6 +291,35 @@ class AuctionServiceTest {
           InvalidBidException.class,
           () -> auctionService.placeBidViaState(99L, BIDDER_ID, lowBid),
           "Đặt giá thấp hơn giá hiện tại phải throw InvalidBidException");
+    }
+  }
+
+  @Nested
+  @DisplayName("State: SETTLING — đang chốt kết quả")
+  class SettlingStateTests {
+
+    @Test
+    @DisplayName("SETTLING.placeBid từ chối bid mới")
+    void testSettlingStatePlaceBidThrowsAuctionClosedException() {
+      Auction auction = buildAuction("SETTLING");
+
+      assertThrows(
+          AuctionClosedException.class,
+          () -> new SettlingState().placeBid(auction, new BigDecimal("2000000"), BIDDER_ID),
+          "SETTLING không được nhận bid mới");
+    }
+
+    @Test
+    @DisplayName("AuctionService.getState với SETTLING trả state từ chối bid")
+    void testAuctionServiceGetStateSettlingRejectsBid() {
+      Auction auction = buildAuction("SETTLING");
+      AuctionState state = auctionService.getState(auction);
+
+      assertTrue(state instanceof SettlingState, "SETTLING phải map sang SettlingState");
+      assertThrows(
+          AuctionClosedException.class,
+          () -> state.placeBid(auction, new BigDecimal("2000000"), BIDDER_ID),
+          "State lấy từ AuctionService phải từ chối bid khi SETTLING");
     }
   }
 
