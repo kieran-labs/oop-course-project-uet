@@ -582,6 +582,53 @@ public class AutoBidConfigDao {
     return count > 0;
   }
 
+  // ============================================================
+  // IN-TRANSACTION READ / WRITE (dùng cùng Handle của transaction đang mở)
+  // ============================================================
+
+  /** Lấy active configs trong transaction đang mở, tránh mở connection mới. */
+  public List<AutoBidConfig> findActiveByAuctionIdInTransaction(Handle handle, Long auctionId) {
+    String sql =
+        "SELECT "
+            + SELECT_COLUMNS
+            + " FROM auto_bid_configs"
+            + " WHERE auction_id = :auctionId AND status = 'ACTIVE'"
+            + " ORDER BY registered_at ASC";
+    return handle
+        .createQuery(sql)
+        .bind("auctionId", auctionId)
+        .map(new AutoBidConfigMapper())
+        .list();
+  }
+
+  /** Tìm config theo id trong transaction đang mở. */
+  public Optional<AutoBidConfig> findByIdInTransaction(Handle handle, Long id) {
+    String sql = "SELECT " + SELECT_COLUMNS + " FROM auto_bid_configs WHERE id = :id";
+    return handle.createQuery(sql).bind("id", id).map(new AutoBidConfigMapper()).findOne();
+  }
+
+  /**
+   * Cập nhật status/failureReason/active của một config trong transaction đang mở.
+   *
+   * <p>Dùng để đánh dấu EXHAUSTED hoặc FAILED nguyên tử cùng với các thao tác bid khác.
+   */
+  public void updateStatusInTransaction(Handle handle, AutoBidConfig config) {
+    handle
+        .createUpdate(
+            """
+            UPDATE auto_bid_configs
+            SET active = :active, status = :status, failure_reason = :failureReason
+            WHERE id = :id
+            """)
+        .bind("active", config.isActive())
+        .bind("status", config.getStatus().name())
+        .bind(
+            "failureReason",
+            config.getFailureReason() != null ? config.getFailureReason().name() : null)
+        .bind("id", config.getId())
+        .execute();
+  }
+
   /**
    * Lấy số lượng auto-bid configs active của một phiên.
    *

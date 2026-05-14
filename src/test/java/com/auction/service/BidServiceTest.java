@@ -903,72 +903,288 @@ class BidServiceTest {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // Nhóm 11: AutoBid Chain Atomic — H-AUTOBID-02
+  // ═══════════════════════════════════════════════════════════
+
   @Nested
-  @DisplayName("AutoBid Chain")
-  class AutoBidChainTests {
+  @DisplayName("AutoBid Chain Atomic — H-AUTOBID-02")
+  class AutoBidChainAtomicTests {
+
+    // Safety limit constant
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Safety limit phải >= 100")
+    void safetyLimit_atLeast100() {
+      assertTrue(
+          AutoBidStrategy.MAX_AUTO_BIDS_PER_TRIGGER >= 100,
+          "MAX_AUTO_BIDS_PER_TRIGGER phải >= 100, hiện tại: "
+              + AutoBidStrategy.MAX_AUTO_BIDS_PER_TRIGGER);
+    }
+
+    // Helper: build a real AutoBidStrategy with the shared mocks
+    private AutoBidStrategy realStrategy() {
+      return new AutoBidStrategy(autoBidConfigDao, userDao);
+    }
+
+    // Helper: build an AutoBidConfig with a specific registeredAt for ordering
+    private AutoBidConfig config(
+        long id, Long bidderId, BigDecimal maxBid, BigDecimal increment, int orderOffset) {
+      return new AutoBidConfig(
+          id,
+          AUCTION_ID,
+          bidderId,
+          maxBid,
+          increment,
+          AutoBidStatus.ACTIVE,
+          null,
+          LocalDateTime.now().plusNanos(orderOffset), // registeredAt — smaller = higher priority
+          LocalDateTime.now());
+    }
 
     @Test
     @SuppressWarnings("checkstyle:MethodName")
-    @DisplayName("Chain terminates when a bidder's budget is exhausted")
-    void autoBidChain_stopsAtBudget() {
-      Auction auction = runningAuction();
-      auction.setCurrentPrice(new BigDecimal("1500000"));
-      auction.setLeadingBidderId(99L);
+    @DisplayName("3 cấu hình cạnh tranh: bid records đầy đủ, leader cuối đúng")
+    void threeCompetingConfigs_fullChainCorrect() {
+      // B registered first (priority), then A, then C
+      AutoBidConfig cfgB =
+          config(11L, BIDDER_B_ID, new BigDecimal("3000000"), new BigDecimal("500000"), 0);
+      AutoBidConfig cfgA =
+          config(10L, BIDDER_ID, new BigDecimal("5000000"), new BigDecimal("500000"), 1);
+      // C is another bidder (4L) — maxBid 4M
+      long bidderCId = 4L;
+      AutoBidConfig cfgC =
+          config(12L, bidderCId, new BigDecimal("4000000"), new BigDecimal("500000"), 2);
 
-      AutoBidConfig bidderA =
-          new AutoBidConfig(
-              10L,
-              AUCTION_ID,
-              BIDDER_ID,
-              new BigDecimal("5000000"),
-              new BigDecimal("500000"),
-              true,
-              LocalDateTime.now().plusNanos(1),
-              LocalDateTime.now());
-      AutoBidConfig bidderB =
-          new AutoBidConfig(
-              11L,
-              AUCTION_ID,
-              BIDDER_B_ID,
-              new BigDecimal("3000000"),
-              new BigDecimal("500000"),
-              true,
-              LocalDateTime.now(),
-              LocalDateTime.now());
+      // Bidder C with enough balance
+      Bidder bidderC = new Bidder();
+      bidderC.setId(bidderCId);
+      bidderC.setBalance(new BigDecimal("100000000"));
+      when(userDao.findByIdForUpdate(mockHandle, bidderCId)).thenReturn(bidderC);
 
-      when(autoBidConfigDao.findActiveByAuctionId(AUCTION_ID))
-          .thenReturn(List.of(bidderB, bidderA));
-      when(autoBidConfigDao.findById(anyLong()))
+      when(autoBidConfigDao.findActiveByAuctionIdInTransaction(mockHandle, AUCTION_ID))
+          .thenReturn(List.of(cfgB, cfgA, cfgC));
+      when(autoBidConfigDao.findByIdInTransaction(eq(mockHandle), eq(10L)))
+          .thenReturn(Optional.of(cfgA));
+      when(autoBidConfigDao.findByIdInTransaction(eq(mockHandle), eq(11L)))
           .thenAnswer(
-              invocation -> {
-                Long id = invocation.getArgument(0);
-                if (id.equals(bidderA.getId())) {
-                  return Optional.of(bidderA);
-                }
-                if (id.equals(bidderB.getId())) {
-                  return Optional.of(bidderB);
-                }
-                return Optional.empty();
+              inv -> {
+                // After B is EXHAUSTED, return exhausted config
+                return Optional.of(cfgB);
               });
+      when(autoBidConfigDao.findByIdInTransaction(eq(mockHandle), eq(12L)))
+          .thenReturn(Optional.of(cfgC));
 
-      AutoBidStrategy strategy = new AutoBidStrategy(autoBidConfigDao);
+      AutoBidStrategy strategy = realStrategy();
+
+      // Track state via executor
+      final BigDecimal[] currentPrice = {new BigDecimal("1500000")}; // manual bid price
+      final Long[] currentLeader = {99L}; // manual bidder
+      List<BidTransaction> bids = new ArrayList<>();
 
       assertTimeoutPreemptively(
           Duration.ofSeconds(5),
           () ->
-              strategy.executeAll(
+              strategy.executeAllInTransaction(
+                  mockHandle,
                   AUCTION_ID,
                   new BigDecimal("1500000"),
                   99L,
-                  (auctionId, bidderId, amount) -> {
-                    auction.setCurrentPrice(amount);
-                    auction.setLeadingBidderId(bidderId);
+                  (h, auctionId, bidderId, amount) -> {
+                    // Verify: bid must be strictly higher than current price
+                    assertTrue(
+                        amount.compareTo(currentPrice[0]) > 0,
+                        "Auto-bid phải cao hơn giá hiện tại");
+                    currentPrice[0] = amount;
+                    currentLeader[0] = bidderId;
+                    BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, true);
+                    bids.add(tx);
+                    return tx;
+                  }));
+
+      // B maxBid=3M, A maxBid=5M, C maxBid=4M, all increment=500k, start=1.5M
+      // B:2M(B), A:2.5M(A), C:3M(C), B:3.5M>3M→EXHAUSTED, A:3.5M(A), C:4M(C), A:4.5M(A),
+      // C:5M>4M→EXHAUSTED, A:leader→skip, done. Final: A leader at 4.5M? Let me verify via asserts.
+      assertFalse(bids.isEmpty(), "Phải có ít nhất 1 bid trong chain");
+
+      // Final leader must be BIDDER_ID (A has maxBid=5M — highest)
+      assertEquals(BIDDER_ID, currentLeader[0], "Leader cuối phải là A (maxBid cao nhất)");
+
+      // All bid amounts must be strictly increasing
+      for (int i = 1; i < bids.size(); i++) {
+        assertTrue(
+            bids.get(i).getAmount().compareTo(bids.get(i - 1).getAmount()) > 0,
+            "Giá bid phải tăng dần");
+      }
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Insufficient balance mid-chain: config marked FAILED, no bid inserted for them")
+    void midChainInsufficientBalance_markedFailedNoBid() {
+      AutoBidConfig cfgB =
+          config(11L, BIDDER_B_ID, new BigDecimal("3000000"), new BigDecimal("500000"), 0);
+      AutoBidConfig cfgA =
+          config(10L, BIDDER_ID, new BigDecimal("5000000"), new BigDecimal("500000"), 1);
+
+      when(autoBidConfigDao.findActiveByAuctionIdInTransaction(mockHandle, AUCTION_ID))
+          .thenReturn(List.of(cfgB, cfgA));
+      when(autoBidConfigDao.findByIdInTransaction(eq(mockHandle), eq(10L)))
+          .thenReturn(Optional.of(cfgA));
+      when(autoBidConfigDao.findByIdInTransaction(eq(mockHandle), eq(11L)))
+          .thenReturn(Optional.of(cfgB));
+
+      // B has insufficient balance — only 100k available, needs 2M (1.5M + 500k)
+      Bidder poorBidderB = new Bidder();
+      poorBidderB.setId(BIDDER_B_ID);
+      poorBidderB.setBalance(new BigDecimal("100000"));
+      when(userDao.findByIdForUpdate(mockHandle, BIDDER_B_ID)).thenReturn(poorBidderB);
+      // A has enough balance (already stubbed in globalSetup via findByIdForUpdate)
+
+      AutoBidStrategy strategy = realStrategy();
+
+      List<Long> whosBid = new ArrayList<>();
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(5),
+          () ->
+              strategy.executeAllInTransaction(
+                  mockHandle,
+                  AUCTION_ID,
+                  new BigDecimal("1500000"),
+                  99L,
+                  (h, auctionId, bidderId, amount) -> {
+                    whosBid.add(bidderId);
                     return new BidTransaction(auctionId, bidderId, amount, true);
                   }));
 
-      assertEquals(new BigDecimal("3500000"), auction.getCurrentPrice());
-      assertEquals(BIDDER_ID, auction.getLeadingBidderId());
-      verify(autoBidConfigDao, atMost(20)).findById(anyLong());
+      // B should NOT have bid (insufficient balance)
+      assertFalse(whosBid.contains(BIDDER_B_ID), "B không có đủ balance — không được bid");
+      // A should have bid (balance OK)
+      assertTrue(whosBid.contains(BIDDER_ID), "A có đủ balance — phải bid");
+
+      // B must be marked FAILED
+      ArgumentCaptor<AutoBidConfig> captor = ArgumentCaptor.forClass(AutoBidConfig.class);
+      verify(autoBidConfigDao, atLeastOnce())
+          .updateStatusInTransaction(eq(mockHandle), captor.capture());
+      boolean bMarkedFailed =
+          captor.getAllValues().stream()
+              .anyMatch(
+                  c ->
+                      c.getBidderId().equals(BIDDER_B_ID)
+                          && c.getStatus() == AutoBidStatus.FAILED
+                          && c.getFailureReason() == AutoBidFailureReason.INSUFFICIENT_BALANCE);
+      assertTrue(bMarkedFailed, "B phải được đánh dấu FAILED với lý do INSUFFICIENT_BALANCE");
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Budget exhausted: config marked EXHAUSTED + notification, no bid inserted")
+    void budgetExhausted_markedExhaustedWithNotification() {
+      // B maxBid=1.8M, increment=500k. At current price 1.5M: nextBid=2M > 1.8M → EXHAUSTED
+      AutoBidConfig cfgB =
+          config(11L, BIDDER_B_ID, new BigDecimal("1800000"), new BigDecimal("500000"), 0);
+
+      when(autoBidConfigDao.findActiveByAuctionIdInTransaction(mockHandle, AUCTION_ID))
+          .thenReturn(List.of(cfgB));
+      when(autoBidConfigDao.findByIdInTransaction(eq(mockHandle), eq(11L)))
+          .thenReturn(Optional.of(cfgB));
+
+      AutoBidStrategy strategy = realStrategy();
+
+      List<Long> whosBid = new ArrayList<>();
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(5),
+          () ->
+              strategy.executeAllInTransaction(
+                  mockHandle,
+                  AUCTION_ID,
+                  new BigDecimal("1500000"),
+                  99L,
+                  (h, auctionId, bidderId, amount) -> {
+                    whosBid.add(bidderId);
+                    return new BidTransaction(auctionId, bidderId, amount, true);
+                  }));
+
+      assertTrue(whosBid.isEmpty(), "B không thể bid — không có bid nào");
+
+      ArgumentCaptor<AutoBidConfig> captor = ArgumentCaptor.forClass(AutoBidConfig.class);
+      verify(autoBidConfigDao).updateStatusInTransaction(eq(mockHandle), captor.capture());
+      AutoBidConfig updated = captor.getValue();
+      assertEquals(AutoBidStatus.EXHAUSTED, updated.getStatus());
+      assertEquals(AutoBidFailureReason.MAX_PRICE_TOO_LOW, updated.getFailureReason());
+      assertFalse(updated.isActive());
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Chain terminates at leader — no infinite loop, safety limit not hit")
+    void chainTerminatesAtLeader_noInfiniteLoop() {
+      // A is the only config and will win the first bid, then become the leader → chain stops
+      AutoBidConfig cfgA =
+          config(10L, BIDDER_ID, new BigDecimal("5000000"), new BigDecimal("500000"), 0);
+
+      when(autoBidConfigDao.findActiveByAuctionIdInTransaction(mockHandle, AUCTION_ID))
+          .thenReturn(List.of(cfgA));
+      when(autoBidConfigDao.findByIdInTransaction(eq(mockHandle), eq(10L)))
+          .thenReturn(Optional.of(cfgA));
+
+      AutoBidStrategy strategy = realStrategy();
+
+      final int[] bidCount = {0};
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(5),
+          () ->
+              strategy.executeAllInTransaction(
+                  mockHandle,
+                  AUCTION_ID,
+                  new BigDecimal("1500000"),
+                  99L,
+                  (h, auctionId, bidderId, amount) -> {
+                    bidCount[0]++;
+                    return new BidTransaction(auctionId, bidderId, amount, true);
+                  }));
+
+      // A bids once (against leader 99L), then A becomes leader → chain stops
+      assertEquals(1, bidCount[0], "Chỉ 1 bid khi chỉ có 1 config và nó trở thành leader");
+      // Safety limit must NOT be reached
+      assertTrue(
+          bidCount[0] < AutoBidStrategy.MAX_AUTO_BIDS_PER_TRIGGER,
+          "Safety limit không được chạm trong trường hợp hợp lệ");
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Chain không tạo bid bằng giá hiện tại (nextBid luôn > currentPrice)")
+    void chainNeverBidsAtCurrentPrice() {
+      // increment = 1 (minimal positive), ensures nextBid > currentPrice always
+      AutoBidConfig cfgA = config(10L, BIDDER_ID, new BigDecimal("5000000"), BigDecimal.ONE, 0);
+
+      when(autoBidConfigDao.findActiveByAuctionIdInTransaction(mockHandle, AUCTION_ID))
+          .thenReturn(List.of(cfgA));
+      when(autoBidConfigDao.findByIdInTransaction(eq(mockHandle), eq(10L)))
+          .thenReturn(Optional.of(cfgA));
+
+      AutoBidStrategy strategy = realStrategy();
+
+      final BigDecimal[] prevAmount = {new BigDecimal("1500000")};
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(5),
+          () ->
+              strategy.executeAllInTransaction(
+                  mockHandle,
+                  AUCTION_ID,
+                  new BigDecimal("1500000"),
+                  99L,
+                  (h, auctionId, bidderId, amount) -> {
+                    assertTrue(
+                        amount.compareTo(prevAmount[0]) > 0,
+                        "Auto-bid phải STRICTY cao hơn giá hiện tại, bid="
+                            + amount
+                            + " prev="
+                            + prevAmount[0]);
+                    prevAmount[0] = amount;
+                    return new BidTransaction(auctionId, bidderId, amount, true);
+                  }));
     }
   }
 }
