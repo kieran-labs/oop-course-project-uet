@@ -26,6 +26,7 @@ import com.auction.pattern.state.FinishedState;
 import com.auction.pattern.state.OpenState;
 import com.auction.pattern.state.PaidState;
 import com.auction.pattern.state.RunningState;
+import com.auction.pattern.state.SettlingState;
 import com.auction.pattern.strategy.AutoBidStrategy;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -160,7 +161,8 @@ class BidServiceTest {
               Auction a = invocation.getArgument(0);
               return switch (a.getStatus()) {
                 case OPEN -> new OpenState();
-                case RUNNING, SETTLING -> new RunningState();
+                case RUNNING -> new RunningState();
+                case SETTLING -> new SettlingState();
                 case FINISHED -> new FinishedState();
                 case PAID -> new PaidState();
                 case CANCELED -> new CanceledState();

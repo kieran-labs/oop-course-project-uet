@@ -9,6 +9,7 @@ public final class AuctionStates {
 
   public static final AuctionState OPEN = new OpenState();
   public static final AuctionState RUNNING = new RunningState();
+  public static final AuctionState SETTLING = new SettlingState();
   public static final AuctionState FINISHED = new FinishedState();
   public static final AuctionState PAID = new PaidState();
   public static final AuctionState CANCELED = new CanceledState();

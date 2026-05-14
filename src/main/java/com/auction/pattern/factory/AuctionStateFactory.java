@@ -13,7 +13,8 @@ public final class AuctionStateFactory {
   public static AuctionState create(String status) {
     return switch (status.toUpperCase()) {
       case "OPEN" -> AuctionStates.OPEN;
-      case "RUNNING", "SETTLING" -> AuctionStates.RUNNING;
+      case "RUNNING" -> AuctionStates.RUNNING;
+      case "SETTLING" -> AuctionStates.SETTLING;
       case "FINISHED" -> AuctionStates.FINISHED;
       case "PAID" -> AuctionStates.PAID;
       case "CANCELED" -> AuctionStates.CANCELED;
