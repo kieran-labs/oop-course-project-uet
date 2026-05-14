@@ -935,6 +935,7 @@ Output JARs will be placed in `build/libs/`.
 |---|---|
 | `./gradlew buildJars` | Build server + client fat JARs |
 | `./gradlew test` | Run all 17 test files |
+| `./gradlew check` | Run quality gates, including JaCoCo instruction coverage verification at 20% minimum |
 | `./gradlew jacocoTestReport` | Coverage report → `build/reports/jacoco/` |
 | `./gradlew spotlessApply` | Auto-format all Java code |
 | `./gradlew spotbugsMain` | Static analysis |
@@ -987,7 +988,7 @@ All members jointly own `model/` (14 domain classes), `dto/` (13 transfer object
 | Auth | JWT (Auth0) | 4.4.0 | Stateless - server holds no session state |
 | Password | BCrypt | 0.10.2 | One-way hash with salt, cost factor 12 |
 | Testing | JUnit 5 + Mockito | 5.11.4 | Parameterized tests + mock injection |
-| Coverage | JaCoCo | - | GitHub Actions artifact |
+| Coverage | JaCoCo | - | GitHub Actions artifact + 20% minimum instruction coverage gate in `check` |
 | Build | Gradle (Kotlin DSL) | 8.12.1 | Type-safe build scripts |
 | Code Style | Checkstyle + Spotless | - | Google Java Style, enforced in CI + pre-commit hook |
 | Static Analysis | SpotBugs | 6.0.9 | MAX effort - null dereferences, race conditions |

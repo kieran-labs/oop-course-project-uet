@@ -254,6 +254,33 @@ tasks.jacocoTestReport {
 }
 
 // ============================================================================
+// JACOCO COVERAGE VERIFICATION — Enforce minimum test coverage
+// ============================================================================
+// Wired into `check` so CI fails when coverage drops below threshold.
+//
+// Current total instruction coverage is ~23.7%, so 20% is a conservative floor
+// that starts enforcing coverage without hiding broad areas behind exclusions.
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.test)
+
+    violationRules {
+        // Gate the whole main bundle; keep exclusions out until there is a
+        // narrow, documented reason to remove generated or unreachable code.
+        rule {
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.20".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(tasks.jacocoTestCoverageVerification)
+}
+
+// ============================================================================
 // CHECKSTYLE — Kiểm tra coding convention
 // ============================================================================
 // Đọc quy tắc từ config/checkstyle/checkstyle.xml
