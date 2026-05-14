@@ -27,8 +27,6 @@ import org.junit.jupiter.api.Assumptions;
  * <ul>
  *   <li>CRUD cơ bản: insert, findById, findAll, update, delete.
  *   <li>Truy vấn lọc: findByStatus, findByItemId, existsById, getCurrentPrice.
- *   <li>Nghiệp vụ tự động: startScheduledAuctions (OPEN → RUNNING), closeExpiredAuctions (RUNNING →
- *       FINISHED).
  * </ul>
  *
  * <p><b>Chiến lược dữ liệu:</b> Mỗi test chạy trong trạng thái DB hoàn toàn sạch. Phương thức
@@ -259,60 +257,6 @@ class AuctionDaoTest {
     auctionDao.delete(saved.getId());
 
     assertFalse(auctionDao.findById(saved.getId()).isPresent());
-  }
-
-  /**
-   * Kiểm tra nghiệp vụ kích hoạt auction theo lịch: các auction có {@code startTime} đã qua (trong
-   * quá khứ) phải được chuyển tự động từ {@code OPEN} sang {@code RUNNING}.
-   *
-   * <p>Auction được tạo với {@code startTime = now() - 5 phút} để đảm bảo điều kiện kích hoạt luôn
-   * đúng bất kể độ trễ thực thi test.
-   */
-  @Test
-  @DisplayName("StartScheduledAuctions should update status from OPEN to RUNNING")
-  void testStartScheduledAuctions() {
-    Auction auction =
-        new Auction(
-            testItem.getId(),
-            new BigDecimal("100000"),
-            LocalDateTime.now().minusMinutes(5), // Bắt đầu từ 5 phút trước
-            LocalDateTime.now().plusHours(1));
-    auctionDao.insert(auction);
-
-    int started = auctionDao.startScheduledAuctions();
-    assertTrue(started >= 1);
-
-    List<Auction> running = auctionDao.findByStatus("RUNNING");
-    assertTrue(running.stream().anyMatch(a -> a.getItemId().equals(testItem.getId())));
-  }
-
-  /**
-   * Kiểm tra nghiệp vụ đóng auction hết hạn: các auction đang ở trạng thái {@code RUNNING} có
-   * {@code endTime} đã qua phải được chuyển sang {@code FINISHED}.
-   *
-   * <p>Auction được tạo với {@code endTime = now() - 1 phút} để đảm bảo điều kiện đóng luôn thỏa
-   * mãn. Vì auction mới insert có status {@code OPEN}, cần gọi {@code update()} để ép sang {@code
-   * RUNNING} trước khi gọi {@code closeExpiredAuctions()}.
-   */
-  @Test
-  @DisplayName("CloseExpiredAuctions should update status from RUNNING to FINISHED")
-  void testCloseExpiredAuctions() {
-    Auction auction =
-        new Auction(
-            testItem.getId(),
-            new BigDecimal("100000"),
-            LocalDateTime.now().minusHours(2),
-            LocalDateTime.now().minusMinutes(1) // Đã kết thúc 1 phút trước
-            );
-    Auction saved = auctionDao.insert(auction);
-    saved.setStatus(AuctionStatus.RUNNING);
-    auctionDao.update(saved); // Ép status sang RUNNING để test hàm close
-
-    int closed = auctionDao.closeExpiredAuctions();
-    assertTrue(closed >= 1);
-
-    List<Auction> finished = auctionDao.findByStatus("FINISHED");
-    assertTrue(finished.stream().anyMatch(a -> a.getItemId().equals(testItem.getId())));
   }
 
   /**

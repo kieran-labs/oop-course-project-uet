@@ -625,55 +625,6 @@ public class AuctionDao {
   // ============================================================
 
   /**
-   * Đóng các phiên đấu giá đã hết hạn.
-   *
-   * <p>Được gọi bởi AuctionScheduler mỗi phút để chuyển các phiên hết hạn từ trạng thái RUNNING
-   * sang FINISHED.
-   *
-   * @return số lượng phiên đã được đóng
-   */
-  public int closeExpiredAuctions() {
-    String sql =
-        """
-        UPDATE auctions
-        SET status = 'FINISHED', updated_at = NOW()
-        WHERE status = 'RUNNING' AND end_time <= NOW()
-        """;
-
-    int rowsAffected = jdbi.withHandle(handle -> handle.createUpdate(sql).execute());
-
-    if (rowsAffected > 0) {
-      LOGGER.info("Closed {} expired auctions", rowsAffected);
-    }
-
-    return rowsAffected;
-  }
-
-  /**
-   * Chuyển các phiên từ OPEN sang RUNNING khi đến giờ bắt đầu.
-   *
-   * <p>Được gọi bởi AuctionScheduler mỗi phút.
-   *
-   * @return số lượng phiên đã được chuyển sang RUNNING
-   */
-  public int startScheduledAuctions() {
-    String sql =
-        """
-        UPDATE auctions
-        SET status = 'RUNNING', updated_at = NOW()
-        WHERE status = 'OPEN' AND start_time <= NOW()
-        """;
-
-    int rowsAffected = jdbi.withHandle(handle -> handle.createUpdate(sql).execute());
-
-    if (rowsAffected > 0) {
-      LOGGER.info("Started {} scheduled auctions", rowsAffected);
-    }
-
-    return rowsAffected;
-  }
-
-  /**
    * Kiểm tra phiên đấu giá có tồn tại không.
    *
    * @param id ID cần kiểm tra
