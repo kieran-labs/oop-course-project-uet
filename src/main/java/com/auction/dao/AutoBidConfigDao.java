@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
@@ -514,6 +515,10 @@ public class AutoBidConfigDao {
    * @return true nếu đã có config active
    */
   public boolean hasActiveConfig(Long auctionId, Long bidderId) {
+    return jdbi.withHandle(handle -> hasActiveConfig(handle, auctionId, bidderId));
+  }
+
+  public boolean hasActiveConfig(Handle handle, Long auctionId, Long bidderId) {
     String sql =
         """
         SELECT COUNT(*) FROM auto_bid_configs
@@ -521,14 +526,12 @@ public class AutoBidConfigDao {
         """;
 
     long count =
-        jdbi.withHandle(
-            handle ->
-                handle
-                    .createQuery(sql)
-                    .bind("auctionId", auctionId)
-                    .bind("bidderId", bidderId)
-                    .mapTo(Long.class)
-                    .one());
+        handle
+            .createQuery(sql)
+            .bind("auctionId", auctionId)
+            .bind("bidderId", bidderId)
+            .mapTo(Long.class)
+            .one();
 
     return count > 0;
   }
