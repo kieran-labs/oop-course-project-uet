@@ -137,6 +137,11 @@ public class RestClient {
     return send(request);
   }
 
+  public static HttpResponse<String> patch(String path, Object body) {
+    HttpRequest request = buildRequest(path).method("PATCH", toBody(body)).build();
+    return send(request);
+  }
+
   /**
    * Gửi DELETE request đến {@code BASE_URL + path}.
    *

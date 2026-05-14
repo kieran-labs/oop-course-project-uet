@@ -130,11 +130,14 @@
                                 styleClass="text-field" />
                   </VBox>
                </HBox>
-               <HBox spacing="10.0">
+               <HBox spacing="12.0" alignment="CENTER_LEFT">
                   <Button fx:id="autoBidButton" text="Bật auto-bid" styleClass="primary-button"
                           onAction="#handleAutoBid" />
                   <Button fx:id="cancelAutoBidButton" text="Tắt auto-bid"
                           styleClass="secondary-button" onAction="#handleCancelAutoBid" />
+                  <Label fx:id="autoBidSpinner" text="⚙"
+                         visible="false" managed="false"
+                         style="-fx-font-size: 50px; -fx-text-fill: #2196f3; -fx-font-weight: bold; -fx-padding: -8 0 -8 0;" />
                </HBox>
                <Label fx:id="autoBidStatusLabel" styleClass="detail-text" text=""
                       wrapText="true" />

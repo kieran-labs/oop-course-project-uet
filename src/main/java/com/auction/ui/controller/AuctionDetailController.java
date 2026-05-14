@@ -17,7 +17,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
+import javafx.animation.RotateTransition;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -117,6 +119,7 @@ public class AuctionDetailController implements Navigable {
   @FXML private Button autoBidButton;
   @FXML private Label autoBidStatusLabel;
   @FXML private Button cancelAutoBidButton;
+  @FXML private Label autoBidSpinner;
 
   // ── Ended state ──
   @FXML private VBox endedBox;
@@ -139,6 +142,7 @@ public class AuctionDetailController implements Navigable {
   private boolean userHasBid;
   private BigDecimal lastKnownBalance;
   private Timeline balancePollTimeline;
+  private RotateTransition autoBidSpinnerTransition;
 
   private final WebSocketClient wsClient = new WebSocketClient();
   private final ObservableList<String> bidHistoryItems = FXCollections.observableArrayList();
@@ -189,6 +193,7 @@ public class AuctionDetailController implements Navigable {
     autoBidStatusLabel.setText("");
     maxBidField.clear();
     incrementField.clear();
+    updateAutoBidActive(false, null, null);
 
     // Bind both columns to explicit 60/40 fractions of the available content width.
     // Both use hgrow=NEVER so HBox doesn't redistribute extra space on top of the binding.
@@ -255,6 +260,9 @@ public class AuctionDetailController implements Navigable {
       loadAuctionDetail();
       loadBidHistory();
       connectWebSocket(sm.getJwtToken());
+      if (isBidder) {
+        loadAutoBidState();
+      }
     }
 
     startBalancePoll();
@@ -277,6 +285,7 @@ public class AuctionDetailController implements Navigable {
       notificationTimeline.stop();
       notificationTimeline = null;
     }
+    stopAutoBidSpinner();
     leftScrollPane.prefWidthProperty().unbind();
     rightColumn.prefWidthProperty().unbind();
     endedBox.maxWidthProperty().unbind();
@@ -427,7 +436,7 @@ public class AuctionDetailController implements Navigable {
                     () -> {
                       autoBidButton.setDisable(false);
                       if (response.statusCode() == 200 || response.statusCode() == 201) {
-                        autoBidStatusLabel.setText("Auto-bid đã được bật.");
+                        updateAutoBidActive(true, maxBid, increment);
                       } else {
                         autoBidStatusLabel.setText(
                             "Bật auto-bid thất bại: " + response.statusCode());
@@ -459,6 +468,7 @@ public class AuctionDetailController implements Navigable {
                 Platform.runLater(
                     () -> {
                       if (response.statusCode() == 204 || response.statusCode() == 200) {
+                        updateAutoBidActive(false, null, null);
                         autoBidStatusLabel.setText("Auto-bid đã được tắt.");
                         maxBidField.clear();
                         incrementField.clear();
@@ -480,6 +490,85 @@ public class AuctionDetailController implements Navigable {
   }
 
   // ========== DATA LOADING ==========
+
+  private void loadAutoBidState() {
+    Long currentAuctionId = auctionId;
+    if (currentAuctionId == null) {
+      return;
+    }
+    Thread.ofVirtual()
+        .start(
+            () -> {
+              try {
+                HttpResponse<String> response =
+                    RestClient.get("/api/auctions/" + currentAuctionId + "/auto-bid");
+                if (response.statusCode() != 200) {
+                  return;
+                }
+                var node = MAPPER.readTree(response.body());
+                boolean active = node.path("active").asBoolean(false);
+                BigDecimal maxBid =
+                    node.hasNonNull("maxBid") ? node.get("maxBid").decimalValue() : null;
+                BigDecimal increment =
+                    node.hasNonNull("increment") ? node.get("increment").decimalValue() : null;
+                Platform.runLater(
+                    () -> {
+                      if (currentAuctionId.equals(auctionId)) {
+                        updateAutoBidActive(active, maxBid, increment);
+                      }
+                    });
+              } catch (Exception e) {
+                LOGGER.debug("Không thể load auto-bid state: {}", e.getMessage());
+              }
+            });
+  }
+
+  private void updateAutoBidActive(boolean active, BigDecimal maxBid, BigDecimal increment) {
+    if (maxBid != null) {
+      maxBidField.setText(maxBid.stripTrailingZeros().toPlainString());
+    }
+    if (increment != null) {
+      incrementField.setText(increment.stripTrailingZeros().toPlainString());
+    }
+    cancelAutoBidButton.setDisable(!active);
+    if (active) {
+      autoBidStatusLabel.setText("Auto-bid đang bật.");
+      startAutoBidSpinner();
+    } else {
+      maxBidField.clear();
+      incrementField.clear();
+      stopAutoBidSpinner();
+      if (autoBidSpinner != null) {
+        autoBidSpinner.setVisible(false);
+        autoBidSpinner.setManaged(false);
+      }
+    }
+  }
+
+  private void startAutoBidSpinner() {
+    if (autoBidSpinner == null) {
+      return;
+    }
+    autoBidSpinner.setVisible(true);
+    autoBidSpinner.setManaged(true);
+    if (autoBidSpinnerTransition == null) {
+      autoBidSpinnerTransition = new RotateTransition(Duration.seconds(1.2), autoBidSpinner);
+      autoBidSpinnerTransition.setFromAngle(0);
+      autoBidSpinnerTransition.setToAngle(360);
+      autoBidSpinnerTransition.setCycleCount(Timeline.INDEFINITE);
+      autoBidSpinnerTransition.setInterpolator(Interpolator.LINEAR);
+    }
+    autoBidSpinnerTransition.play();
+  }
+
+  private void stopAutoBidSpinner() {
+    if (autoBidSpinnerTransition != null) {
+      autoBidSpinnerTransition.stop();
+    }
+    if (autoBidSpinner != null) {
+      autoBidSpinner.setRotate(0);
+    }
+  }
 
   /**
    * Load thông tin chi tiết phiên từ {@code GET /api/auctions/{id}} trên luồng nền. Bỏ qua kết quả

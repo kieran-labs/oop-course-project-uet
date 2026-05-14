@@ -99,7 +99,7 @@ public class UserService {
       return userDao.insert(newUser);
     } catch (org.jdbi.v3.core.statement.UnableToExecuteStatementException e) {
       String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
-      if (msg.contains("users_email_key") || msg.contains("email")) {
+      if (msg.contains("users_email_key") || (msg.contains("duplicate") && msg.contains("email"))) {
         throw new DuplicateException("Email '" + email + "' đã tồn tại!");
       }
       if (msg.contains("users_username_key")
