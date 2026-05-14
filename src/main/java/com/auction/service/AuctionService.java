@@ -316,7 +316,7 @@ public class AuctionService {
       AuctionStatus previousStatus = auction.getStatus();
       auction.setStatus(AuctionStatus.CANCELED);
       persistCanceledAuction(auction, previousStatus);
-      notifyLeadingBidderIfCanceled(auction);
+      emitCancellationIfNeeded(auction, previousStatus);
       LOGGER.info("ADMIN (userId={}) đã cưỡng chế hủy phiên đấu giá #{}", userId, auctionId);
       return;
     }
@@ -351,7 +351,7 @@ public class AuctionService {
       AuctionStatus previousStatus = status;
       auction.setStatus(AuctionStatus.CANCELED);
       persistCanceledAuction(auction, previousStatus);
-      notifyLeadingBidderIfCanceled(auction);
+      emitCancellationIfNeeded(auction, previousStatus);
       LOGGER.info(
           "SELLER (userId={}) đã hủy phiên đấu giá #{} (trạng thái trước: {})",
           userId,
@@ -422,18 +422,13 @@ public class AuctionService {
     };
   }
 
-  private void notifyLeadingBidderIfCanceled(Auction auction) {
-    if (eventManager != null && jdbi != null && auction.getLeadingBidderId() != null) {
+  private void emitCancellationIfNeeded(Auction auction, AuctionStatus previousStatus) {
+    if (eventManager != null
+        && previousStatus != AuctionStatus.CANCELED
+        && auction.getLeadingBidderId() != null) {
       BidUpdateMessage msg =
           BidUpdateMessage.auctionEnded(auction.getId(), auction.getCurrentPrice(), null, null);
       eventManager.notifyAuctionEnd(auction.getId(), msg);
-      jdbi.useHandle(
-          h ->
-              h.execute(
-                  "INSERT INTO notifications (user_id, message, notification_type) "
-                      + "VALUES (?, ?, 'AUCTION_CANCELED')",
-                  auction.getLeadingBidderId(),
-                  "Phiên đấu giá #" + auction.getId() + " đã bị hủy bởi người bán."));
     }
   }
 
@@ -450,7 +445,21 @@ public class AuctionService {
                 handle, auction.getLeadingBidderId(), auction.getCurrentPrice());
           }
           auctionDao.updateInTransaction(handle, auction);
+          insertCancellationNotificationInTransaction(handle, auction, previousStatus);
         });
+  }
+
+  private void insertCancellationNotificationInTransaction(
+      org.jdbi.v3.core.Handle handle, Auction auction, AuctionStatus previousStatus) {
+    if (previousStatus == AuctionStatus.CANCELED || auction.getLeadingBidderId() == null) {
+      return;
+    }
+
+    handle.execute(
+        "INSERT INTO notifications (user_id, message, notification_type) "
+            + "VALUES (?, ?, 'AUCTION_CANCELED')",
+        auction.getLeadingBidderId(),
+        "Phiên đấu giá #" + auction.getId() + " đã bị hủy bởi người bán.");
   }
 
   private Auction toAuction(AuctionResponse response) {
