@@ -316,15 +316,7 @@ public class AuctionScheduler {
                     winnerId,
                     balance,
                     price);
-                handle
-                    .createUpdate(
-                        """
-                        UPDATE users
-                        SET reserved_balance = 0
-                        WHERE id = :userId
-                        """)
-                    .bind("userId", winnerId)
-                    .execute();
+                userDao.releaseReservedBalanceInTransaction(handle, winnerId, price);
                 auction.setStatus(AuctionStatus.FINISHED);
               }
             } else {
