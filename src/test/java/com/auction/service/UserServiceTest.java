@@ -114,12 +114,28 @@ class UserServiceTest {
     assertTrue(ex.getMessage().contains("Email"));
   }
 
+  @Test
+  @Order(5)
+  @DisplayName("testRegisterGenericDbError() - Khong doi loi DB thuong thanh trung email")
+  void testRegisterGenericDbError() {
+    when(userDao.insert(any(User.class)))
+        .thenThrow(
+            new org.jdbi.v3.core.statement.UnableToExecuteStatementException(
+                "ERROR: column \"balance\" does not exist in INSERT INTO users (email)"));
+
+    RegisterRequest regReq = new RegisterRequest("newUser", "pass123", "new@gmail.com", "BIDDER");
+
+    assertThrows(
+        org.jdbi.v3.core.statement.UnableToExecuteStatementException.class,
+        () -> userService.register(regReq));
+  }
+
   // ============================================================
   // 2. TEST ĐĂNG NHẬP (LOGIN)
   // ============================================================
 
   @Test
-  @Order(5)
+  @Order(6)
   @DisplayName("testLoginSuccess() — nhomAnhDuc login -> Token")
   void testLoginSuccess() {
     when(userDao.findByUsername(any())).thenReturn(Optional.of(mockUser));
@@ -133,7 +149,7 @@ class UserServiceTest {
   }
 
   @Test
-  @Order(6)
+  @Order(7)
   @DisplayName("testLoginWrongPassword() — Sai mật khẩu -> UnauthorizedException")
   void testLoginWrongPassword() {
     when(userDao.findByUsername(any())).thenReturn(Optional.of(mockUser));
@@ -149,7 +165,7 @@ class UserServiceTest {
   }
 
   @Test
-  @Order(7)
+  @Order(8)
   @DisplayName("testLoginUserNotFound() — Không tồn tại User -> NotFoundException")
   void testLoginUserNotFound() {
     when(userDao.findByUsername(any())).thenReturn(Optional.empty());
@@ -164,7 +180,7 @@ class UserServiceTest {
   }
 
   @Test
-  @Order(8)
+  @Order(9)
   @DisplayName("testLoginInvalidStoredHash() — Hash lỗi trong DB -> UnauthorizedException")
   void testLoginInvalidStoredHash() {
     mockUser.setPasswordHash("hash");

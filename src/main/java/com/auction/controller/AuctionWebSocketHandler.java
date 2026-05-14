@@ -258,15 +258,17 @@ public class AuctionWebSocketHandler {
    *
    * @param userId ID user cần notify
    * @param newBalance số dư mới (null nếu bị từ chối)
+   * @param balanceDelta số tiền vừa được cộng (null nếu bị từ chối)
    * @param approved true = duyệt (cộng tiền), false = từ chối
    */
-  public void notifyBalanceUpdate(Long userId, BigDecimal newBalance, boolean approved) {
+  public void notifyBalanceUpdate(
+      Long userId, BigDecimal newBalance, BigDecimal balanceDelta, boolean approved) {
     // 1. Luôn lưu vào DB trước
     String message =
         approved
             ? String.format(
-                "Yêu cầu nạp tiền đã được duyệt. Số dư mới: %,d VNĐ",
-                newBalance != null ? newBalance.longValue() : 0)
+                "Yêu cầu nạp tiền đã được duyệt. Số dư biến động: + %,d VND",
+                balanceDelta != null ? balanceDelta.longValue() : 0)
             : "Yêu cầu nạp tiền đã bị từ chối.";
     saveNotificationToDatabase(userId, message, "BALANCE_UPDATED");
 
@@ -276,7 +278,8 @@ public class AuctionWebSocketHandler {
       return;
     }
     try {
-      BidUpdateMessage msg = BidUpdateMessage.balanceUpdated(userId, newBalance, approved);
+      BidUpdateMessage msg =
+          BidUpdateMessage.balanceUpdated(userId, newBalance, balanceDelta, approved);
       String json = objectMapper.writeValueAsString(msg);
       for (WsContext wsCtx : sessions) {
         try {

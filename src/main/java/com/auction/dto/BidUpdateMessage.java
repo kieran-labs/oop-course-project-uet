@@ -71,6 +71,9 @@ public class BidUpdateMessage {
   /** Số dư mới sau khi deposit được duyệt — chỉ có trong message BALANCE_UPDATED. */
   private BigDecimal newBalance;
 
+  /** Số tiền biến động thực tế — chỉ có trong message BALANCE_UPDATED khi được duyệt. */
+  private BigDecimal balanceDelta;
+
   /**
    * Trạng thái duyệt/từ chối — chỉ có trong message BALANCE_UPDATED. Field riêng, không tái dụng
    * autoBid nữa để tránh nhầm lẫn.
@@ -154,15 +157,17 @@ public class BidUpdateMessage {
    *
    * @param userId ID user được cộng tiền
    * @param newBalance số dư mới sau khi cộng
+   * @param balanceDelta số tiền vừa được cộng
    * @param approved true = duyệt (cộng tiền), false = từ chối
    * @return BidUpdateMessage loại BALANCE_UPDATED
    */
   public static BidUpdateMessage balanceUpdated(
-      Long userId, BigDecimal newBalance, boolean approved) {
+      Long userId, BigDecimal newBalance, BigDecimal balanceDelta, boolean approved) {
     BidUpdateMessage msg = new BidUpdateMessage();
     msg.type = TYPE_BALANCE_UPDATED;
     msg.auctionId = userId; // tái dùng field auctionId để chứa userId — client phân biệt qua type
     msg.newBalance = newBalance;
+    msg.balanceDelta = balanceDelta;
     msg.approved = approved; // FIX Bug 2: dùng field approved riêng, không tái dụng autoBid nữa
     msg.timestamp = LocalDateTime.now();
     return msg;
@@ -240,6 +245,14 @@ public class BidUpdateMessage {
 
   public void setNewBalance(BigDecimal newBalance) {
     this.newBalance = newBalance;
+  }
+
+  public BigDecimal getBalanceDelta() {
+    return balanceDelta;
+  }
+
+  public void setBalanceDelta(BigDecimal balanceDelta) {
+    this.balanceDelta = balanceDelta;
   }
 
   /** Trạng thái duyệt — chỉ có ý nghĩa với message BALANCE_UPDATED. */

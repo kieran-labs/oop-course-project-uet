@@ -37,6 +37,8 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
 import javafx.stage.Popup;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -281,6 +283,19 @@ public class AuctionListController implements Navigable {
     NotificationStore store = NotificationStore.getInstance();
     store.markAllRead();
     updateBadge();
+    Thread.ofVirtual()
+        .start(
+            () -> {
+              try {
+                HttpResponse<String> response =
+                    RestClient.patch("/api/notifications/mark-all-read", null);
+                if (response.statusCode() >= 400) {
+                  LOGGER.warn("Mark notifications read failed: {}", response.statusCode());
+                }
+              } catch (Exception e) {
+                LOGGER.debug("Mark notifications read error: {}", e.getMessage());
+              }
+            });
 
     Popup popup = new Popup();
     popup.setAutoHide(true);
@@ -312,16 +327,9 @@ public class AuctionListController implements Navigable {
     } else {
       VBox items = new VBox(4);
       int limit = Math.min(notifications.size(), 50);
-      // Hien thi tu cu nhat (index 0) den moi nhat (index limit-1)
-      // VBox se co: [cu nhat o tren, moi nhat o duoi] -> setVvalue(1.0) cuon xuong day = thay moi
-      // nhat
-      // NotificationStore: index 0 = moi nhat, index N = cu nhat
-      // Duyet limit-1 -> 0 de VBox hien thi cu tren, moi duoi
-      // previousBalance: tim balance cua thong bao ngay sau (index+1) trong list
-      for (int i = limit - 1; i >= 0; i--) {
-        // Tim previousBalance tu thong bao ngay sau trong list (cu hon, index cao hon)
-        BigDecimal prevBal = findPreviousBalanceAt(notifications, i + 1, limit);
-        NotificationRow row = buildNotificationRow(notifications.get(i), prevBal);
+      // NotificationStore: index 0 = moi nhat, hien thi moi nhat o tren cung.
+      for (int i = 0; i < limit; i++) {
+        NotificationRow row = buildNotificationRow(notifications.get(i), null);
         items.getChildren().add(row.node());
       }
       scrollPane = new ScrollPane(items);
@@ -343,7 +351,7 @@ public class AuctionListController implements Navigable {
         stage, bounds.getMinX() - content.getPrefWidth() + bounds.getWidth(), bounds.getMaxY() + 6);
     ScrollPane shownScrollPane = scrollPane;
     if (shownScrollPane != null) {
-      Platform.runLater(() -> shownScrollPane.setVvalue(1.0));
+      Platform.runLater(() -> shownScrollPane.setVvalue(0.0));
     }
   }
 
@@ -397,34 +405,20 @@ public class AuctionListController implements Navigable {
   }
 
   private Node createPriceNotificationNode(PriceSplit split) {
-    HBox item = new HBox(4);
-    item.setMaxWidth(Double.MAX_VALUE);
-    item.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-    item.setPadding(new Insets(7, 10, 7, 10));
-    item.setStyle("-fx-background-color: rgba(255,255,255,0.06); " + "-fx-background-radius: 6;");
-    // Dung VBox thay HBox: dong 1 = text mo ta (wrap duoc), dong 2 = HBox(label + so tien mau)
-    VBox vbox = new VBox(2);
-    vbox.setMaxWidth(Double.MAX_VALUE);
-    vbox.setPadding(new Insets(7, 10, 7, 10));
-    vbox.setStyle("-fx-background-color: rgba(255,255,255,0.06); -fx-background-radius: 6;");
-    item.setPadding(new Insets(0));
-    item.setStyle("");
+    TextFlow flow = new TextFlow();
+    flow.setMaxWidth(Double.MAX_VALUE);
+    flow.setPadding(new Insets(7, 10, 7, 10));
+    flow.setStyle("-fx-background-color: rgba(255,255,255,0.06); -fx-background-radius: 6;");
     if (!split.before().isBlank()) {
-      Label beforeLabel = new Label(split.before().trim());
-      beforeLabel.setWrapText(true);
-      beforeLabel.setMaxWidth(Double.MAX_VALUE);
-      beforeLabel.setStyle("-fx-text-fill: #e0e0e0; -fx-font-size: 12px;");
-      vbox.getChildren().add(beforeLabel);
+      flow.getChildren().add(createNotificationText(split.before(), "#e0e0e0", false));
     }
-    HBox priceRow = new HBox(0);
-    priceRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-    Label priceLabel = createInlineNotificationLabel(split.price(), "#ffd600");
-    priceRow.getChildren().add(priceLabel);
+    String priceText = withLeadingSpaceIfNeeded(split.before(), split.price());
+    priceText = withTrailingSpaceIfNeeded(priceText, split.after());
+    flow.getChildren().add(createNotificationText(priceText, "#ffd600", true));
     if (!split.after().isBlank()) {
-      priceRow.getChildren().add(createInlineNotificationLabel(split.after(), "#e0e0e0"));
+      flow.getChildren().add(createNotificationText(split.after(), "#e0e0e0", false));
     }
-    vbox.getChildren().add(priceRow);
-    return vbox;
+    return flow;
   }
 
   /**
@@ -457,7 +451,10 @@ public class AuctionListController implements Navigable {
       HBox amountRow = new HBox(0);
       amountRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
       if (signIdx > 0) {
-        Label labelPart = new Label(parts[1].substring(0, signIdx));
+        Label labelPart =
+            new Label(
+                withTrailingSpaceIfNeeded(
+                    parts[1].substring(0, signIdx), parts[1].substring(signIdx)));
         labelPart.setStyle("-fx-text-fill: #e0e0e0; -fx-font-size: 12px;");
         Label amountPart = new Label(parts[1].substring(signIdx));
         amountPart.setWrapText(false);
@@ -492,6 +489,27 @@ public class AuctionListController implements Navigable {
     label.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
     label.setStyle("-fx-text-fill: " + color + "; -fx-font-size: 12px;");
     return label;
+  }
+
+  private Text createNotificationText(String text, String color, boolean bold) {
+    Text node = new Text(text);
+    node.setStyle(
+        "-fx-fill: " + color + "; -fx-font-size: 12px;" + (bold ? " -fx-font-weight: bold;" : ""));
+    return node;
+  }
+
+  private String withLeadingSpaceIfNeeded(String before, String text) {
+    if (before == null || before.isBlank() || text == null || text.isBlank()) {
+      return text;
+    }
+    return Character.isWhitespace(before.charAt(before.length() - 1)) ? text : " " + text;
+  }
+
+  private String withTrailingSpaceIfNeeded(String text, String after) {
+    if (text == null || text.isBlank() || after == null || after.isBlank()) {
+      return text;
+    }
+    return Character.isWhitespace(after.charAt(0)) ? text : text + " ";
   }
 
   private String replaceAuctionIdWithName(String notification) {
@@ -534,32 +552,41 @@ public class AuctionListController implements Navigable {
   }
 
   private BalanceDisplay toBalanceDisplay(String notification, BigDecimal previousBalance) {
-    Matcher newBalanceMatcher = NEW_BALANCE_PATTERN.matcher(notification);
-    if (newBalanceMatcher.find()) {
-      BigDecimal newBalance = parseAmount(newBalanceMatcher.group(1));
-      BigDecimal delta =
-          previousBalance != null ? newBalance.subtract(previousBalance) : newBalance;
-      // Giu lai phan chu truoc "So du moi:" lam prefix (VD: "Yeu cau nap tien da duoc duyet")
-      // Dong 1: phan chu truoc "So du bien dong:" (VD: "Yeu cau nap tien da duoc duyet.")
-      // Dong 2: "So du bien dong: + 50.000.000 VND"
-      String rawPrefix = notification.substring(0, newBalanceMatcher.start()).trim();
-      // Strip "So du bien dong:" / "So du moi:" khoi cuoi prefix (neu co)
+    String lower = notification.toLowerCase(Locale.ROOT);
+    boolean isBalanceNotification =
+        lower.contains("số dư biến động")
+            || lower.contains("so du bien dong")
+            || lower.contains("balance");
+    if (!isBalanceNotification) {
+      return null;
+    }
+
+    Matcher deltaMatcher = BALANCE_DELTA_PATTERN.matcher(notification);
+    if (deltaMatcher.find()) {
+      BigDecimal delta = parseAmount(deltaMatcher.group(1));
+      String rawPrefix = notification.substring(0, deltaMatcher.start()).trim();
       String prefix =
           rawPrefix
-              .replaceAll(
-                  "(?i)[.,\\s]*S\u1ed1 d\u01b0 (?:m\u1edbi|bi\u1ebfn \u0111\u1ed9ng):\\s*$", "")
+              .replaceAll("(?i)[.,\\s]*S\u1ed1 d\u01b0 bi\u1ebfn \u0111\u1ed9ng:\\s*$", "")
               .trim();
       prefix = prefix.replaceAll("[.,;:]+$", "").trim();
       String deltaLine = "S\u1ed1 d\u01b0 bi\u1ebfn \u0111\u1ed9ng: " + formatDelta(delta);
       String deltaText = prefix.isEmpty() ? deltaLine : prefix + "\n" + deltaLine;
-      return new BalanceDisplay(deltaText, delta.signum() >= 0 ? "#4caf50" : "#ef5350", newBalance);
+      return new BalanceDisplay(deltaText, delta.signum() >= 0 ? "#4caf50" : "#ef5350", null);
     }
 
-    String lower = notification.toLowerCase(Locale.ROOT);
-    if (lower.contains("số dư") || lower.contains("so du") || lower.contains("balance")) {
-      Matcher deltaMatcher = BALANCE_DELTA_PATTERN.matcher(notification);
-      if (deltaMatcher.find()) {
-        BigDecimal delta = parseAmount(deltaMatcher.group(1));
+    Matcher newBalanceMatcher = NEW_BALANCE_PATTERN.matcher(notification);
+    if (newBalanceMatcher.find()) {
+      return null;
+    }
+
+    String lowerAgain = notification.toLowerCase(Locale.ROOT);
+    if (lowerAgain.contains("số dư")
+        || lowerAgain.contains("so du")
+        || lowerAgain.contains("balance")) {
+      Matcher fallbackDeltaMatcher = BALANCE_DELTA_PATTERN.matcher(notification);
+      if (fallbackDeltaMatcher.find()) {
+        BigDecimal delta = parseAmount(fallbackDeltaMatcher.group(1));
         return new BalanceDisplay(
             formatDelta(delta), delta.signum() >= 0 ? "#4caf50" : "#ef5350", null);
       }

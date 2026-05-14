@@ -8,6 +8,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.BiConsumer;
 import javafx.application.Platform;
 import org.slf4j.Logger;
@@ -112,6 +115,7 @@ public class UserBalanceWatcher {
               // FIX Bug 2: đọc field approved riêng thay vì tái dùng autoBid
               boolean approved = msg.isApproved();
               BigDecimal newBalance = msg.getNewBalance();
+              BigDecimal balanceDelta = msg.getBalanceDelta();
               LOGGER.info("Nhận BALANCE_UPDATED: approved={}, newBalance={}", approved, newBalance);
 
               Platform.runLater(
@@ -123,9 +127,10 @@ public class UserBalanceWatcher {
                     java.text.NumberFormat vndFmt =
                         java.text.NumberFormat.getNumberInstance(java.util.Locale.of("vi", "VN"));
                     String text =
-                        approved && newBalance != null
-                            ? "Yêu cầu nạp tiền đã được duyệt. Số dư biến động: "
-                                + vndFmt.format(newBalance)
+                        approved
+                            ? "Yêu cầu nạp tiền đã được duyệt. Số dư biến động: + "
+                                + vndFmt.format(
+                                    balanceDelta != null ? balanceDelta : BigDecimal.ZERO)
                                 + " VND"
                             : "❌ Yêu cầu nạp tiền bị từ chối";
                     NotificationStore.getInstance().add(text);
@@ -197,15 +202,20 @@ public class UserBalanceWatcher {
 
       if (response.statusCode() == 200) {
         var root = MAPPER.readTree(response.body());
+        List<String> unreadMessages = new ArrayList<>();
+        for (var node : root) {
+          String message = node.has("message") ? node.get("message").asText() : "";
+          boolean isRead = node.has("is_read") && node.get("is_read").asBoolean();
+          if (!isRead && !message.isEmpty()) {
+            unreadMessages.add(message);
+          }
+        }
+        Collections.reverse(unreadMessages);
         Platform.runLater(
             () -> {
-              for (var node : root) {
-                String message = node.has("message") ? node.get("message").asText() : "";
-                boolean isRead = node.has("is_read") && node.get("is_read").asBoolean();
-                if (!isRead && !message.isEmpty()) {
-                  NotificationStore.getInstance().add(message);
-                  LOGGER.info("Đã load offline notification: {}", message);
-                }
+              for (String message : unreadMessages) {
+                NotificationStore.getInstance().add(message);
+                LOGGER.info("Đã load offline notification: {}", message);
               }
             });
       }

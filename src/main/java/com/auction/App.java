@@ -40,8 +40,20 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.javalin.Javalin;
 import io.javalin.json.JavalinJackson;
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.util.Base64;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,8 +83,17 @@ public class App {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(App.class);
   private static final int SERVER_PORT = 8080;
+  private static final Path DATA_DIR = Path.of("data");
+  private static final Path SERVER_PID_FILE = DATA_DIR.resolve("server.pid");
+  private static final Path SERVER_TOKEN_FILE = DATA_DIR.resolve("server.token");
+  private static final AtomicBoolean SHUTTING_DOWN = new AtomicBoolean(false);
 
   public static void main(String[] args) {
+    if (isServerAlreadyRunning()) {
+      System.out.printf("Server is already running at http://localhost:%d%n", SERVER_PORT);
+      return;
+    }
+
     // ── 1. Cấu hình Jackson ───────────────────────────��──────
     ObjectMapper mapper = new ObjectMapper();
     mapper.registerModule(new JavaTimeModule());
@@ -123,10 +144,12 @@ public class App {
     scheduler.start();
 
     // Đăng ký shutdown hook để dừng scheduler khi server tắt
-    registerShutdownHook(scheduler);
+    // Shutdown hook is registered after the Javalin instance is created.
 
     // ── 8. Tạo Javalin instance ──────────────────────────────
     Javalin app = buildJavalin(mapper);
+    String shutdownToken = loadOrCreateShutdownToken();
+    registerShutdownHook(app, scheduler);
 
     // ── 9. Đăng ký JWT Middleware ────────────────────────────
     app.before("/api/*", JwtMiddleware::handle);
@@ -135,7 +158,29 @@ public class App {
     registerExceptionHandlers(app);
 
     // ── 11. Đăng ký Routes ───────────────────────────────────
-    app.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
+    app.get(
+        "/api/health",
+        ctx ->
+            ctx.json(
+                Map.of("status", "ok", "pid", ProcessHandle.current().pid(), "port", SERVER_PORT)));
+    app.post(
+        "/internal/shutdown",
+        ctx -> {
+          if (!isLocalRequest(ctx.ip())) {
+            ctx.status(403).json(Map.of("error", "Shutdown is only allowed from localhost"));
+            return;
+          }
+          if (!shutdownToken.equals(ctx.header("X-Shutdown-Token"))) {
+            ctx.status(401).json(Map.of("error", "Invalid shutdown token"));
+            return;
+          }
+
+          ctx.json(Map.of("status", "shutting_down"));
+          Thread shutdownThread =
+              new Thread(() -> stopServer(app, scheduler), "server-shutdown-request");
+          shutdownThread.setDaemon(false);
+          shutdownThread.start();
+        });
 
     AuthController.register(app, userService);
     AuthController.registerPasswordReset(app, passwordResetService);
@@ -193,9 +238,15 @@ public class App {
         ctx -> {
           requireAdmin(ctx);
           Long requestId = Long.parseLong(ctx.pathParam("id"));
+          DepositRecord pending =
+              depositRequestDao
+                  .findById(requestId)
+                  .orElseThrow(
+                      () -> new NotFoundException("Không tìm thấy yêu cầu nạp tiền: " + requestId));
           com.auction.dto.UserResponse result = userService.approveDeposit(requestId);
           // Notify user qua WebSocket về biến động số dư
-          wsHandler.notifyBalanceUpdate(result.getId(), result.getBalance(), true);
+          wsHandler.notifyBalanceUpdate(
+              result.getId(), result.getBalance(), pending.getAmount(), true);
           ctx.json(result);
         });
 
@@ -206,7 +257,7 @@ public class App {
           Long requestId = Long.parseLong(ctx.pathParam("id"));
           Long userId = userService.rejectDeposit(requestId);
           // Notify user qua WebSocket rằng yêu cầu bị từ chối
-          wsHandler.notifyBalanceUpdate(userId, null, false);
+          wsHandler.notifyBalanceUpdate(userId, null, null, false);
           ctx.status(204);
         });
 
@@ -274,6 +325,23 @@ public class App {
         });
 
     // ── Auto-bid endpoints ────────────────────────────────
+    app.get(
+        "/api/auctions/{id}/auto-bid",
+        ctx -> {
+          String role = ctx.attribute("role");
+          if (!"BIDDER".equals(role)) {
+            throw new UnauthorizedException("Chỉ BIDDER mới được xem auto-bid của mình");
+          }
+          Long auctionId = Long.parseLong(ctx.pathParam("id"));
+          Long bidderId = ctx.attribute("userId");
+          var config = autoBidConfigDao.findByAuctionAndBidder(auctionId, bidderId);
+          if (config.isPresent()) {
+            ctx.json(config.get());
+          } else {
+            ctx.json(Map.of("active", false));
+          }
+        });
+
     app.post(
         "/api/auctions/{id}/auto-bid",
         ctx -> {
@@ -447,6 +515,7 @@ public class App {
 
     // ── 13. Khởi động server ─────────────────────────────────
     app.start(SERVER_PORT);
+    writeServerPid();
     LOGGER.info("Server đang chạy tại http://localhost:{}", SERVER_PORT);
   }
 
@@ -466,15 +535,96 @@ public class App {
         });
   }
 
-  private static void registerShutdownHook(AuctionScheduler scheduler) {
+  private static void registerShutdownHook(Javalin app, AuctionScheduler scheduler) {
     Runtime.getRuntime()
         .addShutdownHook(
             new Thread(
                 () -> {
                   LOGGER.info("Server Ä‘ang táº¯t...");
-                  scheduler.stop();
-                  DatabaseConfig.shutDown();
+                  stopServer(app, scheduler);
                 }));
+  }
+
+  private static void stopServer(Javalin app, AuctionScheduler scheduler) {
+    if (!SHUTTING_DOWN.compareAndSet(false, true)) {
+      return;
+    }
+
+    try {
+      scheduler.stop();
+    } catch (Exception e) {
+      LOGGER.warn("Error while stopping scheduler: {}", e.getMessage());
+    }
+
+    try {
+      app.stop();
+    } catch (Exception e) {
+      LOGGER.warn("Error while stopping HTTP server: {}", e.getMessage());
+    }
+
+    DatabaseConfig.shutDown();
+    deleteServerPid();
+  }
+
+  private static boolean isServerAlreadyRunning() {
+    try (HttpClient client =
+        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()) {
+      HttpRequest request =
+          HttpRequest.newBuilder()
+              .uri(URI.create("http://localhost:" + SERVER_PORT + "/api/health"))
+              .timeout(Duration.ofSeconds(2))
+              .GET()
+              .build();
+      HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+      return response.statusCode() == 200 && response.body().contains("\"status\":\"ok\"");
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private static String loadOrCreateShutdownToken() {
+    try {
+      Files.createDirectories(DATA_DIR);
+      if (Files.exists(SERVER_TOKEN_FILE)) {
+        String token = Files.readString(SERVER_TOKEN_FILE, StandardCharsets.UTF_8).trim();
+        if (!token.isBlank()) {
+          return token;
+        }
+      }
+
+      byte[] bytes = new byte[32];
+      new SecureRandom().nextBytes(bytes);
+      String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+      Files.writeString(SERVER_TOKEN_FILE, token, StandardCharsets.UTF_8);
+      return token;
+    } catch (IOException e) {
+      throw new IllegalStateException("Could not initialize server shutdown token", e);
+    }
+  }
+
+  private static void writeServerPid() {
+    try {
+      Files.createDirectories(DATA_DIR);
+      Files.writeString(
+          SERVER_PID_FILE, Long.toString(ProcessHandle.current().pid()), StandardCharsets.UTF_8);
+    } catch (IOException e) {
+      LOGGER.warn("Could not write server PID file: {}", e.getMessage());
+    }
+  }
+
+  private static void deleteServerPid() {
+    try {
+      Files.deleteIfExists(SERVER_PID_FILE);
+    } catch (IOException e) {
+      LOGGER.warn("Could not delete server PID file: {}", e.getMessage());
+    }
+  }
+
+  private static boolean isLocalRequest(String ip) {
+    return "127.0.0.1".equals(ip)
+        || "0:0:0:0:0:0:0:1".equals(ip)
+        || "::1".equals(ip)
+        || "localhost".equalsIgnoreCase(ip);
   }
 
   private static void requireAdmin(io.javalin.http.Context ctx) {
