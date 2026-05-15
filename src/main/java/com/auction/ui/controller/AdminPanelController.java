@@ -67,7 +67,7 @@ import org.slf4j.LoggerFactory;
 public class AdminPanelController implements Navigable {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AdminPanelController.class);
-  private static final NumberFormat VND = NumberFormat.getCurrencyInstance(Locale.of("vi", "VN"));
+  private static final NumberFormat VND = NumberFormat.getNumberInstance(Locale.of("vi", "VN"));
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   @FXML private Label usernameLabel;
@@ -463,7 +463,7 @@ public class AdminPanelController implements Navigable {
               @Override
               protected void updateItem(BigDecimal price, boolean empty) {
                 super.updateItem(price, empty);
-                setText(empty || price == null ? null : VND.format(price));
+                setText(empty || price == null ? null : VND.format(price) + " VND");
               }
             });
 
@@ -521,7 +521,7 @@ public class AdminPanelController implements Navigable {
               @Override
               protected void updateItem(BigDecimal balance, boolean empty) {
                 super.updateItem(balance, empty);
-                setText(empty || balance == null ? null : VND.format(balance));
+                setText(empty || balance == null ? null : VND.format(balance) + " VND");
               }
             });
 
@@ -629,7 +629,7 @@ public class AdminPanelController implements Navigable {
               @Override
               protected void updateItem(BigDecimal amount, boolean empty) {
                 super.updateItem(amount, empty);
-                setText(empty || amount == null ? null : VND.format(amount));
+                setText(empty || amount == null ? null : VND.format(amount) + " VND");
               }
             });
 

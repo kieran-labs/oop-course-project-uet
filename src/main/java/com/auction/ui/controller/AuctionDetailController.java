@@ -101,6 +101,7 @@ public class AuctionDetailController implements Navigable {
   @FXML private Label currentPriceLabel;
   @FXML private Label leadingBidderLabel;
   @FXML private Label countdownLabel;
+  @FXML private Label timerHeaderLabel;
 
   // ── Layout (60/40 split binding + 60% endedBox) ──
   @FXML private HBox contentHBox;
@@ -141,6 +142,20 @@ public class AuctionDetailController implements Navigable {
 
   private Long auctionId;
   private Long endTimeMs;
+
+  /**
+   * True while the timer counts down to startTime (auction is OPEN, not yet started). When the
+   * value reaches 0 the controller flips this back to false and switches to counting down to
+   * endTime — mirroring the AuctionScheduler's OPEN→RUNNING transition.
+   */
+  private boolean countdownToStart;
+
+  /**
+   * End-of-auction timestamp captured when entering OPEN state, used to recompute the RUNNING
+   * countdown after the start-countdown reaches zero.
+   */
+  private java.time.LocalDateTime pendingRunningEndTime;
+
   private String currentItemName;
   private boolean userHasBid;
   private BigDecimal lastKnownBalance;
@@ -185,6 +200,36 @@ public class AuctionDetailController implements Navigable {
     usernameLabel.setText(sm.getCurrentUsername() != null ? sm.getCurrentUsername() : "");
     bidHistoryList.setItems(bidHistoryItems);
     updateTotalBidsLabel(0);
+
+    // Clear every visible label that carries state from the previous auction so the user does
+    // not see stale text (e.g. "Đã kết thúc" from a finished auction) while loadAuctionDetail()
+    // is still in flight. Controller is cached, so without this reset the prior screen's data
+    // remains painted for ~1-2 seconds until the GET response replaces it.
+    stopCountdown();
+    markCountdownActive();
+    setTimerHeader(false);
+    countdownLabel.setText("—");
+    countdownToStart = false;
+    pendingRunningEndTime = null;
+    endTimeMs = null;
+    currentPriceLabel.setText("—");
+    leadingBidderLabel.setText("—");
+    itemNameLabel.setText("Đang tải...");
+    itemCategoryLabel.setText("");
+    itemDescriptionLabel.setText("");
+    itemBrandLabel.setVisible(false);
+    itemBrandLabel.setManaged(false);
+    itemArtistLabel.setVisible(false);
+    itemArtistLabel.setManaged(false);
+    itemYearLabel.setVisible(false);
+    itemYearLabel.setManaged(false);
+    auctionStatusLabel.setText("");
+    auctionStatusLabel.setStyle("");
+    winnerLabel.setText("");
+    if (bidNotificationLabel != null) {
+      bidNotificationLabel.setVisible(false);
+      bidNotificationLabel.setManaged(false);
+    }
 
     // Reset per-auction state
     userHasBid = false;
@@ -886,7 +931,8 @@ public class AuctionDetailController implements Navigable {
       }
       case BidUpdateMessage.TYPE_AUCTION_ENDED -> {
         stopCountdown();
-        countdownLabel.setText("Đã kết thúc");
+        markCountdownEnded();
+        setTimerHeader(false);
         auctionStatusLabel.setText("FINISHED");
         applyStatusStyle(auctionStatusLabel, "FINISHED");
         bidBox.setVisible(false);
@@ -1109,12 +1155,28 @@ public class AuctionDetailController implements Navigable {
             ? auction.getLeadingBidderUsername()
             : "Chưa có");
 
-    endTimeMs = auction.getRemainingTimeMs();
     String st = auction.getStatus();
     if ("CANCELED".equals(st) || "FINISHED".equals(st) || "PAID".equals(st)) {
       stopCountdown();
-      countdownLabel.setText("Đã kết thúc");
+      markCountdownEnded();
+      setTimerHeader(false);
+    } else if ("OPEN".equals(st) && auction.getStartTime() != null) {
+      // Phiên chưa bắt đầu — đếm ngược đến startTime, header chuyển sang "BẮT ĐẦU SAU"
+      countdownToStart = true;
+      pendingRunningEndTime = auction.getEndTime();
+      endTimeMs =
+          java.time.Duration.between(java.time.LocalDateTime.now(), auction.getStartTime())
+              .toMillis();
+      setTimerHeader(true);
+      markCountdownActive();
+      startCountdown();
     } else {
+      // RUNNING (hoặc không xác định) — đếm ngược đến endTime
+      countdownToStart = false;
+      pendingRunningEndTime = null;
+      endTimeMs = auction.getRemainingTimeMs();
+      setTimerHeader(false);
+      markCountdownActive();
       startCountdown();
     }
 
@@ -1212,13 +1274,46 @@ public class AuctionDetailController implements Navigable {
                     long m = (endTimeMs % 3_600_000) / 60_000;
                     long s = (endTimeMs % 60_000) / 1000;
                     countdownLabel.setText(String.format("%02d:%02d:%02d", h, m, s));
+                  } else if (countdownToStart && pendingRunningEndTime != null) {
+                    // OPEN → RUNNING: chuyển sang đếm ngược đến endTime
+                    countdownToStart = false;
+                    endTimeMs =
+                        java.time.Duration.between(
+                                java.time.LocalDateTime.now(), pendingRunningEndTime)
+                            .toMillis();
+                    pendingRunningEndTime = null;
+                    setTimerHeader(false);
+                    if (endTimeMs == null || endTimeMs <= 0) {
+                      markCountdownEnded();
+                      stopCountdown();
+                    }
                   } else {
-                    countdownLabel.setText("Đã kết thúc");
+                    markCountdownEnded();
                     stopCountdown();
                   }
                 }));
     countdownTimeline.setCycleCount(Timeline.INDEFINITE);
     countdownTimeline.play();
+  }
+
+  /** Cập nhật header "THỜI GIAN CÒN" / "BẮT ĐẦU SAU" theo trạng thái phiên. */
+  private void setTimerHeader(boolean toStart) {
+    if (timerHeaderLabel != null) {
+      timerHeaderLabel.setText(toStart ? "BẮT ĐẦU SAU" : "THỜI GIAN CÒN");
+    }
+  }
+
+  /** Đặt countdownLabel sang trạng thái "đã kết thúc" — text + style class .ended. */
+  private void markCountdownEnded() {
+    countdownLabel.setText("Đã kết thúc");
+    if (!countdownLabel.getStyleClass().contains("ended")) {
+      countdownLabel.getStyleClass().add("ended");
+    }
+  }
+
+  /** Đảm bảo countdownLabel không còn ở trạng thái "đã kết thúc" trước khi tick HH:MM:SS. */
+  private void markCountdownActive() {
+    countdownLabel.getStyleClass().removeAll("ended");
   }
 
   /** Dừng và hủy Timeline đếm ngược nếu đang chạy. */

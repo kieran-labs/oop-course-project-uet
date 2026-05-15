@@ -261,6 +261,13 @@
     -fx-text-fill: #9333EA;
 }
 
+/* When auction has ended, countdownLabel shows the text "Đã kết thúc"
+   instead of HH:MM:SS. Shrink so it doesn't dwarf the stat-card. */
+.countdown-label.ended {
+    -fx-font-size: 14px;
+    -fx-text-fill: #64748B;
+}
+
 .winner-label {
     -fx-font-size: 15px;
     -fx-font-weight: bold;
@@ -826,7 +833,7 @@
 
 .auction-table .column-header .label {
     -fx-text-fill: rgba(255,255,255,0.90);
-    -fx-font-size: 12px;
+    -fx-font-size: 13px;
     -fx-font-weight: bold;
     -fx-padding: 12 10 12 12;
     -fx-alignment: CENTER_LEFT;
@@ -907,6 +914,16 @@
 /* ================================================================
    CHART  (AreaChart — bid price history)
    ================================================================ */
+
+/* Trim the implicit padding that the Chart container adds around its
+   plot+axis content. Without these, the plot area sits inside a thick
+   empty border, making the chart look small relative to its card. */
+.chart {
+    -fx-padding: 0;
+}
+.chart-content {
+    -fx-padding: 0;
+}
 
 /* Plot area background */
 .chart-plot-background {
@@ -1083,4 +1100,17 @@
     -fx-min-width: 16;
     -fx-min-height: 16;
     -fx-alignment: CENTER;
+}
+
+/* ================================================================
+   GLOBAL TEXT SMOOTHING — layout-safe
+   Replaces Prism's default LCD subpixel rendering with grayscale AA.
+   LCD AA produces visible color fringes / "răng cưa li ti" on custom
+   fonts (Lexend) rendered against alpha-blended backgrounds (the many
+   rgba(...) panels and dropshadows used in this theme). Grayscale AA
+   is cleaner against any background.
+   Does not change layout, sizing, spacing, colour, border, or radius.
+   ================================================================ */
+* {
+    -fx-font-smoothing-type: gray;
 }

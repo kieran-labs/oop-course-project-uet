@@ -28,7 +28,7 @@ public class ProfileController implements Navigable {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ProfileController.class);
   private static final ObjectMapper MAPPER = new ObjectMapper();
-  private static final NumberFormat VND = NumberFormat.getCurrencyInstance(Locale.of("vi", "VN"));
+  private static final NumberFormat VND = NumberFormat.getNumberInstance(Locale.of("vi", "VN"));
 
   @FXML private Label usernameLabel;
   @FXML private Label roleLabel;
@@ -118,7 +118,7 @@ public class ProfileController implements Navigable {
    */
   private void onBalanceUpdated(BigDecimal newBalance, boolean approved) {
     if (approved && newBalance != null && profileBalanceLabel != null) {
-      profileBalanceLabel.setText(VND.format(newBalance));
+      profileBalanceLabel.setText(VND.format(newBalance) + " VND");
     }
   }
 
@@ -141,7 +141,7 @@ public class ProfileController implements Navigable {
                   Platform.runLater(
                       () -> {
                         if (profileBalanceLabel != null) {
-                          profileBalanceLabel.setText(VND.format(balance));
+                          profileBalanceLabel.setText(VND.format(balance) + " VND");
                         }
                       });
                 }
