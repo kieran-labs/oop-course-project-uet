@@ -89,7 +89,7 @@
                </VBox>
                <VBox alignment="CENTER_LEFT" spacing="6.0" styleClass="stat-card-timer"
                      HBox.hgrow="NEVER" prefWidth="140.0">
-                  <Label styleClass="stat-label" text="THỜI GIAN CÒN" />
+                  <Label fx:id="timerHeaderLabel" styleClass="stat-label" text="THỜI GIAN CÒN" />
                   <Label fx:id="countdownLabel" styleClass="countdown-label" text="—" />
                </VBox>
             </HBox>

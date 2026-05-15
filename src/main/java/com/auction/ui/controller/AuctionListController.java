@@ -718,7 +718,7 @@ public class AuctionListController implements Navigable {
                 String st = computeClientStatus(a);
                 if ("FINISHED".equals(st) || "CANCELED".equals(st) || "PAID".equals(st)) {
                   setText("Đã kết thúc");
-                  setStyle("-fx-font-size: 11px;");
+                  setStyle("");
                   return;
                 }
                 setStyle("");
@@ -752,7 +752,7 @@ public class AuctionListController implements Navigable {
                   long ms = java.time.Duration.between(now, endTime).toMillis();
                   if (ms <= 0) {
                     setText("Đã kết thúc");
-                    setStyle("-fx-font-size: 11px;");
+                    setStyle("");
                   } else {
                     long totalSec = ms / 1000;
                     long h = totalSec / 3600;

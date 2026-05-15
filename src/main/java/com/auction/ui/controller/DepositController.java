@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
 public class DepositController implements Navigable {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(DepositController.class);
-  private static final NumberFormat VND = NumberFormat.getCurrencyInstance(Locale.of("vi", "VN"));
+  private static final NumberFormat VND = NumberFormat.getNumberInstance(Locale.of("vi", "VN"));
   private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
   private static final ObjectMapper MAPPER =
       new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
@@ -106,7 +106,7 @@ public class DepositController implements Navigable {
                         showStatus(
                             "Yêu cầu nạp "
                                 + VND.format(amount)
-                                + " đã được gửi. Chờ Admin xác nhận.",
+                                + " VND đã được gửi. Chờ Admin xác nhận.",
                             false);
                         amountField.clear();
                         loadHistory();
@@ -156,7 +156,9 @@ public class DepositController implements Navigable {
                   if (node.has("balance")) {
                     BigDecimal balance = node.get("balance").decimalValue();
                     Platform.runLater(
-                        () -> balanceLabel.setText("Số dư hiện tại: " + VND.format(balance)));
+                        () ->
+                            balanceLabel.setText(
+                                "Số dư hiện tại: " + VND.format(balance) + " VND"));
                   }
                 }
               } catch (Exception e) {
@@ -210,7 +212,7 @@ public class DepositController implements Navigable {
             default -> "⏳ Chờ duyệt";
           };
       String dateStr = r.getCreatedAt() != null ? r.getCreatedAt().format(DATE_FMT) : "—";
-      String amtStr = r.getAmount() != null ? VND.format(r.getAmount()) : "—";
+      String amtStr = r.getAmount() != null ? VND.format(r.getAmount()) + " VND" : "—";
       items.add(amtStr + "  |  " + statusText + "  |  " + dateStr);
 
       if (r.getId() != null) {

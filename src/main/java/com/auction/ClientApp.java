@@ -135,6 +135,11 @@ public class ClientApp extends Application {
    * @param args tham số dòng lệnh (không sử dụng)
    */
   public static void main(String[] args) {
+    // Prism's LCD subpixel renderer produces colour fringing on Lexend stems
+    // and against the many rgba()/dropshadow backgrounds in style.css. Switch
+    // to grayscale text AA before JavaFX boots. Pair with the global
+    // `-fx-font-smoothing-type: gray` rule in css/style.css.
+    System.setProperty("prism.lcdtext", "false");
     launch(args);
   }
 }
