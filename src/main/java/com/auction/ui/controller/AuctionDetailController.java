@@ -244,6 +244,9 @@ public class AuctionDetailController implements Navigable {
     bidButton.setDisable(false);
     if (balanceLabel != null) {
       balanceLabel.setText("Số dư: đang tải...");
+      // Clear stale inline colour from a previous auction so the placeholder uses
+      // .balance-inline's slate tone instead of leftover red/green.
+      balanceLabel.setStyle("");
     }
     autoBidStatusLabel.setText("");
     autoBidStatusLabel.setStyle("");
@@ -464,7 +467,7 @@ public class AuctionDetailController implements Navigable {
     String incrementText = incrementField.getText().trim();
 
     if (maxBidText.isEmpty() || incrementText.isEmpty()) {
-      showAutoBidMessage("Vui lòng nhập đầy đủ thông tin.", "#ef5350");
+      showAutoBidMessage("Vui lòng nhập đầy đủ thông tin.", "#DC2626");
       return;
     }
 
@@ -474,12 +477,12 @@ public class AuctionDetailController implements Navigable {
       maxBid = new BigDecimal(maxBidText.replace(",", "").replace(".", ""));
       increment = new BigDecimal(incrementText.replace(",", "").replace(".", ""));
     } catch (NumberFormatException e) {
-      showAutoBidMessage("Giá trị không hợp lệ.", "#ef5350");
+      showAutoBidMessage("Giá trị không hợp lệ.", "#DC2626");
       return;
     }
 
     if (maxBid.signum() <= 0 || increment.signum() <= 0) {
-      showAutoBidMessage("Giá tối đa và bước tăng phải lớn hơn 0.", "#ef5350");
+      showAutoBidMessage("Giá tối đa và bước tăng phải lớn hơn 0.", "#DC2626");
       return;
     }
 
@@ -490,7 +493,7 @@ public class AuctionDetailController implements Navigable {
               + ") không đủ để đặt bid đầu tiên ("
               + vnd(currentPriceValue.add(increment))
               + ").",
-          "#ef5350");
+          "#DC2626");
       return;
     }
 
@@ -520,7 +523,7 @@ public class AuctionDetailController implements Navigable {
                             err != null && !err.isBlank()
                                 ? err
                                 : "Bật auto-bid thất bại: " + response.statusCode(),
-                            "#ef5350");
+                            "#DC2626");
                       }
                     });
               } catch (Exception e) {
@@ -531,7 +534,7 @@ public class AuctionDetailController implements Navigable {
                         return;
                       }
                       autoBidButton.setDisable(false);
-                      showAutoBidMessage("Không thể kết nối đến server.", "#ef5350");
+                      showAutoBidMessage("Không thể kết nối đến server.", "#DC2626");
                     });
               }
             });
@@ -559,12 +562,12 @@ public class AuctionDetailController implements Navigable {
                         // applyAutoBidState(STOPPED, ...) tự xóa field + hiện thông báo grey.
                         applyAutoBidState("STOPPED", null, null, null);
                       } else {
-                        showAutoBidMessage("Tắt auto-bid thất bại.", "#ef5350");
+                        showAutoBidMessage("Tắt auto-bid thất bại.", "#DC2626");
                       }
                     });
               } catch (Exception e) {
                 LOGGER.error("Lỗi tắt auto-bid", e);
-                Platform.runLater(() -> showAutoBidMessage("Không thể kết nối.", "#ef5350"));
+                Platform.runLater(() -> showAutoBidMessage("Không thể kết nối.", "#DC2626"));
               }
             });
   }
@@ -668,7 +671,7 @@ public class AuctionDetailController implements Navigable {
         text = itemLabel + "Auto-bid đã dừng tự động.";
       }
       NotificationStore.getInstance().add(text);
-      displayToast(text, "#ff9800", 4);
+      displayToast(text, "#D97706", 4);
     }
     lastAutoBidStatus = status;
 
@@ -690,7 +693,7 @@ public class AuctionDetailController implements Navigable {
               + (maxBid != null ? vnd(maxBid) : "—")
               + " — Bước: "
               + (increment != null ? vnd(increment) : "—"),
-          "#2e7d32");
+          "#16A34A");
       return;
     }
 
@@ -712,7 +715,7 @@ public class AuctionDetailController implements Navigable {
       String msg =
           "Auto-bid đã dừng: hạn mức (max) thấp hơn giá hiện tại + bước tăng."
               + " Hãy chỉnh giá tối đa cao hơn rồi bật lại.";
-      showAutoBidMessage(msg, "#ff9800");
+      showAutoBidMessage(msg, "#D97706");
     } else if ("FAILED".equals(status)) {
       if (maxBid != null) {
         maxBidField.setText(maxBid.stripTrailingZeros().toPlainString());
@@ -725,11 +728,11 @@ public class AuctionDetailController implements Navigable {
               ? "Auto-bid đã dừng: số dư khả dụng không đủ để tiếp tục."
                   + " Hãy nạp thêm tiền rồi bật lại."
               : "Auto-bid đã dừng do lỗi" + (reason != null ? " (" + reason + ")." : ".");
-      showAutoBidMessage(msg, "#ef5350");
+      showAutoBidMessage(msg, "#DC2626");
     } else if ("STOPPED".equals(status)) {
       maxBidField.clear();
       incrementField.clear();
-      showAutoBidMessage("Auto-bid đã tắt.", "#90a4ae");
+      showAutoBidMessage("Auto-bid đã tắt.", "#64748B");
     } else {
       maxBidField.clear();
       incrementField.clear();
@@ -984,19 +987,19 @@ public class AuctionDetailController implements Navigable {
 
     if (isSeller) {
       text = itemLabel + "Có bid mới: " + price + " từ " + bidder;
-      color = "#0277BD";
+      color = "#1565C0";
       // Bell entry được đẩy qua kênh /ws/user/{sellerId} (SELLER_BID_RECEIVED) — tránh nhân đôi.
     } else if (isOwnBid && msg.isAutoBid()) {
       text = itemLabel + "Auto-bid đặt " + price + " cho bạn";
-      color = "#2e7d32";
+      color = "#16A34A";
       NotificationStore.getInstance().add(text);
     } else if (isOwnBid) {
       text = itemLabel + "Bạn đặt giá: " + price;
-      color = "#2e7d32";
+      color = "#16A34A";
       NotificationStore.getInstance().add(text);
     } else {
       text = itemLabel + bidder + " vừa bid " + price;
-      color = "#1565c0";
+      color = "#1565C0";
       if (userHasBid) {
         NotificationStore.getInstance().add(text);
       }
@@ -1010,7 +1013,7 @@ public class AuctionDetailController implements Navigable {
    * Timeline cũ bị dừng và thay bằng Timeline mới.
    *
    * @param text nội dung hiển thị
-   * @param bgColor mã màu CSS nền (vd: {@code "#2e7d32"})
+   * @param bgColor mã màu CSS nền (vd: {@code "#16A34A"})
    * @param seconds thời gian hiển thị tính bằng giây
    */
   private void displayToast(String text, String bgColor, int seconds) {
@@ -1051,8 +1054,8 @@ public class AuctionDetailController implements Navigable {
     balanceLabel.setText("Số dư: " + vnd(balance));
     balanceLabel.setStyle(
         balance.compareTo(BigDecimal.ZERO) == 0
-            ? "-fx-font-size: 11px; -fx-text-fill: #ef5350;"
-            : "-fx-font-size: 11px; -fx-text-fill: #66bb6a;");
+            ? "-fx-text-fill: #DC2626;"
+            : "-fx-text-fill: #16A34A;");
   }
 
   /**
@@ -1338,7 +1341,7 @@ public class AuctionDetailController implements Navigable {
         switch (status) {
           case "RUNNING" -> "#16A34A";
           case "OPEN" -> "#1565C0";
-          case "FINISHED", "PAID" -> "#475569";
+          case "FINISHED", "PAID" -> "#64748B";
           case "CANCELED" -> "#DC2626";
           default -> "#64748B";
         };

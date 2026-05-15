@@ -245,6 +245,27 @@
     -fx-text-fill: #64748B;
 }
 
+/* Highlighted balance/amount display — used in Profile & Deposit cards
+   where the user's wallet balance is the focal point of the section. */
+.price-text {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #16A34A;
+}
+
+/* Small caption above bid input — shows live wallet balance. */
+.balance-inline {
+    -fx-font-size: 12px;
+    -fx-text-fill: #64748B;
+}
+
+/* Bid-history counter chip ("12 lượt") — muted bold caption. */
+.muted-caption {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #64748B;
+}
+
 /* ----------------------------------------------------------------
    Key metric displays
    ---------------------------------------------------------------- */
@@ -410,6 +431,46 @@
 .secondary-button:pressed {
     -fx-background-color: #DBEAFE;
     -fx-border-color: #1565C0;
+}
+
+/* Solid green — admin "Duyệt" actions inside tables */
+.approve-button {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #FFFFFF;
+    -fx-background-color: #16A34A;
+    -fx-background-radius: 6;
+    -fx-border-color: transparent;
+    -fx-padding: 4 12 4 12;
+    -fx-cursor: hand;
+}
+
+.approve-button:hover {
+    -fx-background-color: #15803D;
+}
+
+.approve-button:pressed {
+    -fx-background-color: #166534;
+}
+
+/* Solid red — admin "Từ chối" actions inside tables */
+.reject-button {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #FFFFFF;
+    -fx-background-color: #DC2626;
+    -fx-background-radius: 6;
+    -fx-border-color: transparent;
+    -fx-padding: 4 12 4 12;
+    -fx-cursor: hand;
+}
+
+.reject-button:hover {
+    -fx-background-color: #B91C1C;
+}
+
+.reject-button:pressed {
+    -fx-background-color: #991B1B;
 }
 
 /* Red variant — delete / destructive actions */

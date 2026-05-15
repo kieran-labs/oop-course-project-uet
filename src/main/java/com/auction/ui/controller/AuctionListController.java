@@ -80,7 +80,6 @@ public class AuctionListController implements Navigable {
   private static final Logger LOGGER = LoggerFactory.getLogger(AuctionListController.class);
   private static final ObjectMapper MAPPER =
       new ObjectMapper().registerModule(new JavaTimeModule());
-  private static final NumberFormat VND = NumberFormat.getCurrencyInstance(Locale.of("vi", "VN"));
   private static final NumberFormat VND_AMOUNT =
       NumberFormat.getNumberInstance(Locale.of("vi", "VN"));
   private static final Pattern AUCTION_ID_PATTERN = Pattern.compile("#(\\d+)");
@@ -312,7 +311,7 @@ public class AuctionListController implements Navigable {
     ScrollPane scrollPane = null;
     if (notifications.isEmpty()) {
       Label empty = new Label("Chưa có thông báo nào.");
-      empty.setStyle("-fx-text-fill: #78909c; -fx-font-size: 13px; -fx-padding: 4 0 4 0;");
+      empty.setStyle("-fx-text-fill: #94A3B8; -fx-font-size: 13px; -fx-padding: 4 0 4 0;");
       content.getChildren().add(empty);
     } else {
       VBox items = new VBox(4);
@@ -572,7 +571,7 @@ public class AuctionListController implements Navigable {
       }
       String deltaLine = "S\u1ed1 d\u01b0 bi\u1ebfn \u0111\u1ed9ng: " + formatDelta(delta);
       String deltaText = prefix.isEmpty() ? deltaLine : prefix + "\n" + deltaLine;
-      return new BalanceDisplay(deltaText, delta.signum() >= 0 ? "#4caf50" : "#ef5350", null);
+      return new BalanceDisplay(deltaText, delta.signum() >= 0 ? "#22C55E" : "#EF4444", null);
     }
 
     Matcher newBalanceMatcher = NEW_BALANCE_PATTERN.matcher(notification);
@@ -588,7 +587,7 @@ public class AuctionListController implements Navigable {
       if (fallbackDeltaMatcher.find()) {
         BigDecimal delta = parseAmount(fallbackDeltaMatcher.group(1));
         return new BalanceDisplay(
-            formatDelta(delta), delta.signum() >= 0 ? "#4caf50" : "#ef5350", null);
+            formatDelta(delta), delta.signum() >= 0 ? "#22C55E" : "#EF4444", null);
       }
     }
     return null;
@@ -780,10 +779,10 @@ public class AuctionListController implements Navigable {
                   setText(effective);
                   String color =
                       switch (effective) {
-                        case "RUNNING" -> "-fx-text-fill: #00c853; -fx-font-weight: bold;";
-                        case "OPEN" -> "-fx-text-fill: #2196f3; -fx-font-weight: bold;";
-                        case "FINISHED", "PAID" -> "-fx-text-fill: #9e9e9e;";
-                        case "CANCELED" -> "-fx-text-fill: #e53935;";
+                        case "RUNNING" -> "-fx-text-fill: #16A34A; -fx-font-weight: bold;";
+                        case "OPEN" -> "-fx-text-fill: #1565C0; -fx-font-weight: bold;";
+                        case "FINISHED", "PAID" -> "-fx-text-fill: #64748B;";
+                        case "CANCELED" -> "-fx-text-fill: #DC2626;";
                         default -> "";
                       };
                   setStyle(color);

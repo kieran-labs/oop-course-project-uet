@@ -285,7 +285,8 @@ public class DepositController implements Navigable {
    */
   private void showStatus(String msg, boolean isError) {
     statusLabel.setText(msg);
-    statusLabel.setStyle(isError ? "-fx-text-fill: #e53935;" : "-fx-text-fill: #43a047;");
+    statusLabel.setStyle("");
+    statusLabel.getStyleClass().setAll(isError ? "error-label" : "status-label");
     statusLabel.setVisible(true);
     statusLabel.setManaged(true);
   }
