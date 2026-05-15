@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.PriorityQueue;
 import java.util.Set;
 import org.jdbi.v3.core.Handle;
@@ -300,9 +301,11 @@ public class AutoBidStrategy {
                 + " VALUES (?, ?, 'AUTOBID_EXHAUSTED')",
             config.getBidderId(),
             String.format(
+                Locale.of("vi", "VN"),
                 "Auto-bid của bạn cho phiên #%d đã hết hạn mức:"
-                    + " maxBid không đủ để tiếp tục (giá hiện tại: %,d VNĐ)",
-                auctionId, toIntegerVnd(currentPrice, "Current price")));
+                    + " maxBid không đủ để tiếp tục (giá hiện tại: %,d VND)",
+                auctionId,
+                toIntegerVnd(currentPrice, "Current price")));
         LOGGER.debug("Auto-bid EXHAUSTED: bidder={}, auction={}", config.getBidderId(), auctionId);
         for (AutoBidConfig skipped : skippedLeaderConfigs) {
           queue.offer(skipped);
@@ -324,8 +327,9 @@ public class AutoBidStrategy {
                 + " VALUES (?, ?, 'AUTOBID_FAILED')",
             config.getBidderId(),
             String.format(
+                Locale.of("vi", "VN"),
                 "Auto-bid của bạn cho phiên #%d thất bại: số dư không đủ."
-                    + " Cần %,d VNĐ, có %,d VNĐ",
+                    + " Cần %,d VND, có %,d VND",
                 auctionId,
                 toIntegerVnd(nextAmount, "Next auto-bid amount"),
                 toIntegerVnd(bidder.getAvailableBalance(), "Available balance")));
