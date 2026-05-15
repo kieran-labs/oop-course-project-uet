@@ -3,6 +3,7 @@ package com.auction.pattern.strategy;
 import com.auction.exception.InvalidBidException;
 import com.auction.model.Auction;
 import com.auction.model.BidTransaction;
+import com.auction.util.MoneyValidator;
 import java.math.BigDecimal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,9 +62,7 @@ public class ManualBidStrategy implements BidStrategy {
   public BidTransaction execute(
       Auction auction, Long bidderId, BigDecimal amount, boolean isAutoBid) {
     // 1. Validate giá
-    if (amount == null || amount.signum() <= 0) {
-      throw new InvalidBidException("Giá bid phải lớn hơn 0");
-    }
+    requirePositiveIntegerVnd(amount, "Bid amount");
 
     // 2. Seller không được bid sản phẩm của mình
     if (auction.getSellerId() != null && auction.getSellerId().equals(bidderId)) {
@@ -87,5 +86,13 @@ public class ManualBidStrategy implements BidStrategy {
 
     // 5. Trả về BidTransaction (chưa lưu DB — BidService tự lưu)
     return new BidTransaction(auction.getId(), bidderId, amount, isAutoBid);
+  }
+
+  private static void requirePositiveIntegerVnd(BigDecimal amount, String fieldName) {
+    try {
+      MoneyValidator.requirePositiveIntegerVnd(amount, fieldName);
+    } catch (IllegalArgumentException e) {
+      throw new InvalidBidException(e.getMessage());
+    }
   }
 }

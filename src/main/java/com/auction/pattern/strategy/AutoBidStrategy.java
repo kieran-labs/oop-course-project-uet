@@ -9,6 +9,7 @@ import com.auction.model.AutoBidFailureReason;
 import com.auction.model.AutoBidStatus;
 import com.auction.model.BidTransaction;
 import com.auction.model.User;
+import com.auction.util.MoneyValidator;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -123,9 +124,7 @@ public class AutoBidStrategy implements BidStrategy {
   @Override
   public BidTransaction execute(
       Auction auction, Long bidderId, BigDecimal amount, boolean isAutoBid) {
-    if (amount == null || amount.signum() <= 0) {
-      throw new InvalidBidException("Giá auto-bid phải lớn hơn 0");
-    }
+    requirePositiveIntegerVnd(amount, "Auto-bid amount");
 
     if (amount.compareTo(auction.getCurrentPrice()) <= 0) {
       throw new InvalidBidException(
@@ -336,7 +335,7 @@ public class AutoBidStrategy implements BidStrategy {
             String.format(
                 "Auto-bid của bạn cho phiên #%d đã hết hạn mức:"
                     + " maxBid không đủ để tiếp tục (giá hiện tại: %,d VNĐ)",
-                auctionId, currentPrice.longValue()));
+                auctionId, toIntegerVnd(currentPrice, "Current price")));
         LOGGER.info("Auto-bid EXHAUSTED: bidder={}, auction={}", config.getBidderId(), auctionId);
         for (AutoBidConfig skipped : skippedLeaderConfigs) {
           queue.offer(skipped);
@@ -360,7 +359,9 @@ public class AutoBidStrategy implements BidStrategy {
             String.format(
                 "Auto-bid của bạn cho phiên #%d thất bại: số dư không đủ."
                     + " Cần %,d VNĐ, có %,d VNĐ",
-                auctionId, nextAmount.longValue(), bidder.getAvailableBalance().longValue()));
+                auctionId,
+                toIntegerVnd(nextAmount, "Next auto-bid amount"),
+                toIntegerVnd(bidder.getAvailableBalance(), "Available balance")));
         LOGGER.info(
             "Auto-bid FAILED (balance): bidder={}, auction={}", config.getBidderId(), auctionId);
         for (AutoBidConfig skipped : skippedLeaderConfigs) {
@@ -388,6 +389,22 @@ public class AutoBidStrategy implements BidStrategy {
 
     if (autoBidCount >= MAX_AUTO_BIDS_PER_TRIGGER) {
       LOGGER.warn("Đạt giới hạn {} auto-bid cho phiên #{}", MAX_AUTO_BIDS_PER_TRIGGER, auctionId);
+    }
+  }
+
+  private static void requirePositiveIntegerVnd(BigDecimal amount, String fieldName) {
+    try {
+      MoneyValidator.requirePositiveIntegerVnd(amount, fieldName);
+    } catch (IllegalArgumentException e) {
+      throw new InvalidBidException(e.getMessage());
+    }
+  }
+
+  private static long toIntegerVnd(BigDecimal amount, String fieldName) {
+    try {
+      return MoneyValidator.toIntegerVndExact(amount, fieldName);
+    } catch (IllegalArgumentException | ArithmeticException e) {
+      throw new InvalidBidException(e.getMessage());
     }
   }
 }

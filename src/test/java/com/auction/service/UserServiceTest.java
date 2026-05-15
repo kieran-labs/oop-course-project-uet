@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import at.favre.lib.crypto.bcrypt.BCrypt;
 import com.auction.config.JwtUtil;
+import com.auction.dao.DepositRequestDao;
 import com.auction.dao.UserDao;
 import com.auction.dto.ChangePasswordRequest;
 import com.auction.dto.LoginRequest;
@@ -15,6 +16,7 @@ import com.auction.exception.NotFoundException;
 import com.auction.exception.UnauthorizedException;
 import com.auction.model.Bidder;
 import com.auction.model.User;
+import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +33,7 @@ import org.mockito.quality.Strictness;
 class UserServiceTest {
 
   @Mock private UserDao userDao;
+  @Mock private DepositRequestDao depositRequestDao;
 
   @InjectMocks private UserService userService;
 
@@ -240,5 +243,17 @@ class UserServiceTest {
 
     assertTrue(ex.getMessage().contains("lịch sử"));
     verify(userDao, never()).delete(1L);
+  }
+
+  @Test
+  @Order(13)
+  @DisplayName("requestDeposit() rejects decimal VND before creating deposit record")
+  void requestDepositRejectsDecimalAmount() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> userService.requestDeposit(1L, new BigDecimal("100000.50")));
+
+    verify(userDao, never()).findById(any());
+    verify(depositRequestDao, never()).insert(any());
   }
 }
