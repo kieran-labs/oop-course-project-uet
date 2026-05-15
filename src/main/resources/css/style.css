@@ -385,39 +385,49 @@
     -fx-border-radius: 8;
 }
 
+/* Primary CTA — vertical gradient gives subtle depth without breaking the
+   flat-card aesthetic. Drop shadow doubles as elevation cue on hover. */
 .primary-button {
     -fx-font-size: 14px;
     -fx-font-weight: bold;
     -fx-text-fill: #FFFFFF;
-    -fx-background-color: #1565C0;
+    -fx-background-color: linear-gradient(to bottom, #1976D2 0%, #1565C0 100%);
     -fx-background-radius: 8;
     -fx-border-color: transparent;
-    -fx-padding: 0 24 0 24;
+    -fx-padding: 0 26 0 26;
     -fx-pref-height: 40;
     -fx-min-height: 40;
     -fx-cursor: hand;
-    -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.32), 8, 0, 0, 2);
+    -fx-effect: dropshadow(gaussian, rgba(13,71,161,0.30), 10, 0, 0, 3);
 }
 
 .primary-button:hover {
-    -fx-background-color: #1976D2;
-    -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.48), 12, 0, 0, 3);
+    -fx-background-color: linear-gradient(to bottom, #2196F3 0%, #1976D2 100%);
+    -fx-effect: dropshadow(gaussian, rgba(13,71,161,0.42), 14, 0, 0, 4);
 }
 
 .primary-button:pressed {
-    -fx-background-color: #0D47A1;
+    -fx-background-color: linear-gradient(to bottom, #1565C0 0%, #0D47A1 100%);
+    -fx-effect: dropshadow(gaussian, rgba(13,71,161,0.20), 4, 0, 0, 1);
+}
+
+.primary-button:disabled {
+    -fx-background-color: #94A3B8;
+    -fx-opacity: 0.75;
     -fx-effect: none;
 }
 
+/* Secondary — outlined, bold so weight matches primary's affordance. */
 .secondary-button {
     -fx-font-size: 14px;
+    -fx-font-weight: bold;
     -fx-text-fill: #1565C0;
     -fx-background-color: transparent;
     -fx-border-color: #BFDBFE;
     -fx-border-width: 1.5;
     -fx-background-radius: 8;
     -fx-border-radius: 8;
-    -fx-padding: 0 20 0 20;
+    -fx-padding: 0 22 0 22;
     -fx-pref-height: 40;
     -fx-min-height: 40;
     -fx-cursor: hand;
@@ -425,7 +435,7 @@
 
 .secondary-button:hover {
     -fx-background-color: #EFF6FF;
-    -fx-border-color: #93C5FD;
+    -fx-border-color: #1976D2;
 }
 
 .secondary-button:pressed {
@@ -433,44 +443,126 @@
     -fx-border-color: #1565C0;
 }
 
-/* Solid green — admin "Duyệt" actions inside tables */
+.secondary-button:disabled {
+    -fx-text-fill: #94A3B8;
+    -fx-border-color: #E2E8F0;
+    -fx-opacity: 0.7;
+}
+
+/* ----------------------------------------------------------------
+   Table-row action chips — compact buttons used inside TableView
+   columns. Three semantic variants (view / cancel / delete) share
+   geometry (28px height, 6px radius, 11px bold) so they line up
+   neatly and look like a coherent toolbar per row.
+   ---------------------------------------------------------------- */
+.table-action-view,
+.table-action-cancel,
+.table-action-delete {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-border-width: 1.2;
+    -fx-padding: 4 12 4 12;
+    -fx-pref-height: 28;
+    -fx-min-height: 28;
+    -fx-cursor: hand;
+}
+
+.table-action-view {
+    -fx-text-fill: #1565C0;
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #93C5FD;
+}
+.table-action-view:hover {
+    -fx-text-fill: #FFFFFF;
+    -fx-background-color: linear-gradient(to bottom, #1976D2 0%, #1565C0 100%);
+    -fx-border-color: #1565C0;
+    -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.32), 5, 0, 0, 1);
+}
+.table-action-view:pressed {
+    -fx-background-color: linear-gradient(to bottom, #1565C0 0%, #0D47A1 100%);
+    -fx-border-color: #0D47A1;
+    -fx-effect: none;
+}
+
+.table-action-cancel {
+    -fx-text-fill: #B45309;
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #FCD34D;
+}
+.table-action-cancel:hover {
+    -fx-text-fill: #FFFFFF;
+    -fx-background-color: linear-gradient(to bottom, #F59E0B 0%, #D97706 100%);
+    -fx-border-color: #D97706;
+    -fx-effect: dropshadow(gaussian, rgba(217,119,6,0.32), 5, 0, 0, 1);
+}
+.table-action-cancel:pressed {
+    -fx-background-color: linear-gradient(to bottom, #D97706 0%, #B45309 100%);
+    -fx-border-color: #B45309;
+    -fx-effect: none;
+}
+
+.table-action-delete {
+    -fx-text-fill: #FFFFFF;
+    -fx-background-color: linear-gradient(to bottom, #EF4444 0%, #DC2626 100%);
+    -fx-border-color: transparent;
+    -fx-effect: dropshadow(gaussian, rgba(220,38,38,0.28), 4, 0, 0, 1);
+}
+.table-action-delete:hover {
+    -fx-background-color: linear-gradient(to bottom, #DC2626 0%, #B91C1C 100%);
+    -fx-effect: dropshadow(gaussian, rgba(220,38,38,0.45), 7, 0, 0, 2);
+}
+.table-action-delete:pressed {
+    -fx-background-color: linear-gradient(to bottom, #B91C1C 0%, #991B1B 100%);
+    -fx-effect: none;
+}
+
+/* Solid green — admin "Duyệt" actions inside tables. Compact chip with
+   subtle shadow so it pops against the white row without dominating. */
 .approve-button {
     -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-text-fill: #FFFFFF;
-    -fx-background-color: #16A34A;
+    -fx-background-color: linear-gradient(to bottom, #22C55E 0%, #16A34A 100%);
     -fx-background-radius: 6;
     -fx-border-color: transparent;
-    -fx-padding: 4 12 4 12;
+    -fx-padding: 6 14 6 14;
     -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(22,163,74,0.30), 4, 0, 0, 1);
 }
 
 .approve-button:hover {
-    -fx-background-color: #15803D;
+    -fx-background-color: linear-gradient(to bottom, #16A34A 0%, #15803D 100%);
+    -fx-effect: dropshadow(gaussian, rgba(22,163,74,0.42), 6, 0, 0, 2);
 }
 
 .approve-button:pressed {
-    -fx-background-color: #166534;
+    -fx-background-color: linear-gradient(to bottom, #15803D 0%, #166534 100%);
+    -fx-effect: none;
 }
 
-/* Solid red — admin "Từ chối" actions inside tables */
+/* Solid red — admin "Từ chối" actions inside tables. */
 .reject-button {
     -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-text-fill: #FFFFFF;
-    -fx-background-color: #DC2626;
+    -fx-background-color: linear-gradient(to bottom, #EF4444 0%, #DC2626 100%);
     -fx-background-radius: 6;
     -fx-border-color: transparent;
-    -fx-padding: 4 12 4 12;
+    -fx-padding: 6 14 6 14;
     -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(220,38,38,0.30), 4, 0, 0, 1);
 }
 
 .reject-button:hover {
-    -fx-background-color: #B91C1C;
+    -fx-background-color: linear-gradient(to bottom, #DC2626 0%, #B91C1C 100%);
+    -fx-effect: dropshadow(gaussian, rgba(220,38,38,0.42), 6, 0, 0, 2);
 }
 
 .reject-button:pressed {
-    -fx-background-color: #991B1B;
+    -fx-background-color: linear-gradient(to bottom, #B91C1C 0%, #991B1B 100%);
+    -fx-effect: none;
 }
 
 /* Red variant — delete / destructive actions */
@@ -498,7 +590,8 @@
     -fx-background-color: #FEE2E2;
 }
 
-/* Profile-context logout — neutral, full-width inside white card */
+/* Profile-context logout — neutral, full-width inside white card.
+   Slightly darker hover ramp signals destructive without being aggressive. */
 .card-logout-button {
     -fx-font-size: 14px;
     -fx-font-weight: bold;
@@ -508,7 +601,7 @@
     -fx-border-width: 1.5;
     -fx-background-radius: 8;
     -fx-border-radius: 8;
-    -fx-padding: 0 20 0 20;
+    -fx-padding: 0 22 0 22;
     -fx-pref-height: 40;
     -fx-min-height: 40;
     -fx-cursor: hand;
@@ -516,38 +609,44 @@
 
 .card-logout-button:hover {
     -fx-background-color: #FEE2E2;
-    -fx-border-color: #F87171;
+    -fx-border-color: #DC2626;
+    -fx-text-fill: #991B1B;
 }
 
 .card-logout-button:pressed {
     -fx-background-color: #FECACA;
+    -fx-border-color: #991B1B;
 }
 
+/* Top-bar logout — bold weight + firmer border for readability on the
+   gradient header. Translucent glass-on-navy look. */
 .logout-button {
     -fx-font-size: 13px;
+    -fx-font-weight: bold;
     -fx-text-fill: #FFFFFF;
-    -fx-background-color: rgba(255,255,255,0.14);
-    -fx-border-color: rgba(255,255,255,0.32);
-    -fx-border-width: 1;
+    -fx-background-color: rgba(255,255,255,0.16);
+    -fx-border-color: rgba(255,255,255,0.45);
+    -fx-border-width: 1.2;
     -fx-background-radius: 8;
     -fx-border-radius: 8;
-    -fx-padding: 0 16 0 16;
+    -fx-padding: 0 18 0 18;
     -fx-pref-height: 34;
     -fx-min-height: 34;
     -fx-cursor: hand;
 }
 
 .logout-button:hover {
-    -fx-background-color: rgba(255,255,255,0.24);
-    -fx-border-color: rgba(255,255,255,0.55);
+    -fx-background-color: rgba(255,255,255,0.28);
+    -fx-border-color: rgba(255,255,255,0.70);
 }
 
 .logout-button:pressed {
     -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.30);
 }
 
 .back-button {
-    -fx-font-size: 15px;
+    -fx-font-size: 14px;
     -fx-font-weight: bold;
     -fx-text-fill: #FFFFFF;
     -fx-background-color: rgba(255,255,255,0.15);
@@ -559,20 +658,40 @@
     -fx-pref-height: 38;
     -fx-min-height: 38;
     -fx-cursor: hand;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 6, 0, 0, 1);
+    -fx-graphic-text-gap: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 6, 0, 0, 1);
 }
 
 .back-button:hover {
     -fx-text-fill: #FFFFFF;
-    -fx-background-color: rgba(255,255,255,0.26);
-    -fx-border-color: rgba(255,255,255,0.62);
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.22), 10, 0, 0, 2);
+    -fx-background-color: rgba(255,255,255,0.28);
+    -fx-border-color: rgba(255,255,255,0.65);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.28), 10, 0, 0, 2);
 }
 
 .back-button:pressed {
     -fx-background-color: rgba(255,255,255,0.08);
     -fx-border-color: rgba(255,255,255,0.28);
     -fx-effect: none;
+}
+
+/* Crisp chevron-left vector used as the graphic of every .back-button.
+   Path source: Material Icons "arrow_back" simplified to a chevron;
+   -fx-scale-shape true lets it grow to the requested min/pref dimensions. */
+.back-icon {
+    -fx-shape: "M14.71 6.71a1 1 0 0 0-1.42 0L8.71 11.29a1 1 0 0 0 0 1.42l4.58 4.58a1 1 0 1 0 1.42-1.42L10.83 12l3.88-3.87a1 1 0 0 0 0-1.42z";
+    -fx-background-color: #FFFFFF;
+    -fx-min-width: 14;
+    -fx-min-height: 14;
+    -fx-pref-width: 14;
+    -fx-pref-height: 14;
+    -fx-max-width: 14;
+    -fx-max-height: 14;
+    -fx-scale-shape: true;
+}
+
+.back-button:hover .back-icon {
+    -fx-background-color: #FFFFFF;
 }
 
 .link-button {
@@ -992,16 +1111,17 @@
     -fx-border-color: transparent;
 }
 
-/* Grid lines — very subtle hairlines */
+/* Grid lines — subtle hairlines. Horizontal dashed to read as helper
+   "rulers"; vertical solid to anchor each bid index. */
 .chart-vertical-grid-lines {
-    -fx-stroke: #F1F5F9;
+    -fx-stroke: #E8F0FE;
     -fx-stroke-width: 1;
 }
 
 .chart-horizontal-grid-lines {
-    -fx-stroke: #F1F5F9;
+    -fx-stroke: #E2E8F0;
     -fx-stroke-width: 1;
-    -fx-stroke-dash-array: 4 4;
+    -fx-stroke-dash-array: 3 5;
 }
 
 /* Zero reference lines */
@@ -1011,24 +1131,39 @@
     -fx-stroke-width: 1;
 }
 
-/* Area fill — translucent blue under the line */
+/* Area fill — vertical gradient: stronger blue near the line, fading
+   to near-transparent at the baseline. Gives the price curve a clear
+   "ribbon" under it without dominating the plot. */
 .default-color0.chart-area-fill {
-    -fx-fill: rgba(21, 101, 192, 0.08);
+    -fx-fill: linear-gradient(to bottom,
+        rgba(21, 101, 192, 0.38) 0%,
+        rgba(21, 101, 192, 0.14) 60%,
+        rgba(21, 101, 192, 0.02) 100%);
     -fx-stroke: transparent;
 }
 
-/* Area line — solid blue, 2.5px */
+/* Area line — solid blue 3px, rounded joints so polylines don't show
+   sharp angles at each bid. */
 .default-color0.chart-area-line {
     -fx-stroke: #1565C0;
-    -fx-stroke-width: 2.5;
+    -fx-stroke-width: 3;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
 }
 
-/* Data-point symbols — filled blue dot, white ring */
+/* Data-point symbols — filled blue dot ringed in white with a soft
+   drop shadow so each bid reads as a tactile node on the curve. */
 .default-color0.chart-area-symbol {
-    -fx-background-color: #1565C0, #FFFFFF;
-    -fx-background-insets: 0, 2;
-    -fx-background-radius: 6;
-    -fx-padding: 5;
+    -fx-background-color: #FFFFFF, #1565C0;
+    -fx-background-insets: 0, 3;
+    -fx-background-radius: 7;
+    -fx-padding: 6;
+    -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.42), 5, 0, 0, 1);
+}
+
+.default-color0.chart-area-symbol:hover {
+    -fx-padding: 7;
+    -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.65), 8, 0, 0, 2);
 }
 
 /* Axis labels */
@@ -1152,7 +1287,7 @@
 }
 
 .notification-badge {
-    -fx-background-color: #e53935;
+    -fx-background-color: #DC2626;
     -fx-text-fill: white;
     -fx-font-size: 10px;
     -fx-font-weight: bold;

@@ -170,6 +170,40 @@ public class AuctionDetailController implements Navigable {
   private final ObservableList<String> bidHistoryItems = FXCollections.observableArrayList();
   private Timeline countdownTimeline;
 
+  /**
+   * LRU-bounded cache of the most recent {@link AuctionResponse} per auctionId. Lets the controller
+   * render previously-visited auctions instantly when the user navigates back instead of blanking
+   * the screen to "Đang tải..." while waiting for the GET request.
+   */
+  private static final int DETAIL_CACHE_MAX = 16;
+
+  private final java.util.Map<Long, AuctionResponse> detailCache =
+      java.util.Collections.synchronizedMap(
+          new java.util.LinkedHashMap<>(16, 0.75f, true) {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            protected boolean removeEldestEntry(java.util.Map.Entry<Long, AuctionResponse> eldest) {
+              return size() > DETAIL_CACHE_MAX;
+            }
+          });
+
+  /** Cached snapshot of bid history per auctionId — same purpose as {@link #detailCache}. */
+  private final java.util.Map<Long, java.util.List<String>> bidHistoryCache =
+      java.util.Collections.synchronizedMap(
+          new java.util.LinkedHashMap<>(16, 0.75f, true) {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            protected boolean removeEldestEntry(
+                java.util.Map.Entry<Long, java.util.List<String>> eldest) {
+              return size() > DETAIL_CACHE_MAX;
+            }
+          });
+
+  /** AuctionId that is currently fully painted onto the screen (after updateAuctionUI). */
+  private Long renderedAuctionId;
+
   // ========== NAVIGABLE LIFECYCLE ==========
 
   /**
@@ -199,60 +233,97 @@ public class AuctionDetailController implements Navigable {
     SceneManager sm = SceneManager.getInstance();
     usernameLabel.setText(sm.getCurrentUsername() != null ? sm.getCurrentUsername() : "");
     bidHistoryList.setItems(bidHistoryItems);
-    updateTotalBidsLabel(0);
 
-    // Clear every visible label that carries state from the previous auction so the user does
-    // not see stale text (e.g. "Đã kết thúc" from a finished auction) while loadAuctionDetail()
-    // is still in flight. Controller is cached, so without this reset the prior screen's data
-    // remains painted for ~1-2 seconds until the GET response replaces it.
-    stopCountdown();
-    markCountdownActive();
-    setTimerHeader(false);
-    countdownLabel.setText("—");
-    countdownToStart = false;
-    pendingRunningEndTime = null;
-    endTimeMs = null;
-    currentPriceLabel.setText("—");
-    leadingBidderLabel.setText("—");
-    itemNameLabel.setText("Đang tải...");
-    itemCategoryLabel.setText("");
-    itemDescriptionLabel.setText("");
-    itemBrandLabel.setVisible(false);
-    itemBrandLabel.setManaged(false);
-    itemArtistLabel.setVisible(false);
-    itemArtistLabel.setManaged(false);
-    itemYearLabel.setVisible(false);
-    itemYearLabel.setManaged(false);
-    auctionStatusLabel.setText("");
-    auctionStatusLabel.setStyle("");
-    winnerLabel.setText("");
-    if (bidNotificationLabel != null) {
-      bidNotificationLabel.setVisible(false);
-      bidNotificationLabel.setManaged(false);
+    // Decide rendering strategy BEFORE blanking anything:
+    //   - Same auction as last render → keep UI on screen, just refresh in background.
+    //   - Different auction but cached → repaint from cache instantly, refresh in background.
+    //   - Truly fresh navigation → blank to placeholder + load.
+    // This avoids the "Đang tải..." flash on revisit and the stale-data flash on first visit.
+    boolean sameAsRendered = auctionId != null && auctionId.equals(renderedAuctionId);
+    AuctionResponse cached = auctionId == null ? null : detailCache.get(auctionId);
+
+    if (sameAsRendered) {
+      // Quietly refresh — labels already correct for this auction.
+      if (bidNotificationLabel != null) {
+        bidNotificationLabel.setVisible(false);
+        bidNotificationLabel.setManaged(false);
+      }
+    } else if (cached != null) {
+      // Repaint from cache so the user sees the auction immediately, then refresh below.
+      updateAuctionUI(cached);
+      java.util.List<String> cachedHistory = bidHistoryCache.get(auctionId);
+      if (cachedHistory != null) {
+        bidHistoryItems.setAll(cachedHistory);
+        updateTotalBidsLabel(cachedHistory.size());
+      } else {
+        updateTotalBidsLabel(0);
+      }
+      if (bidNotificationLabel != null) {
+        bidNotificationLabel.setVisible(false);
+        bidNotificationLabel.setManaged(false);
+      }
+    } else {
+      // First-time render of this auction in this session — blank to neutral placeholders.
+      updateTotalBidsLabel(0);
+      stopCountdown();
+      markCountdownActive();
+      setTimerHeader(false);
+      countdownLabel.setText("—");
+      countdownToStart = false;
+      pendingRunningEndTime = null;
+      endTimeMs = null;
+      currentPriceLabel.setText("—");
+      leadingBidderLabel.setText("—");
+      itemNameLabel.setText("Đang tải...");
+      itemCategoryLabel.setText("");
+      itemDescriptionLabel.setText("");
+      itemBrandLabel.setVisible(false);
+      itemBrandLabel.setManaged(false);
+      itemArtistLabel.setVisible(false);
+      itemArtistLabel.setManaged(false);
+      itemYearLabel.setVisible(false);
+      itemYearLabel.setManaged(false);
+      auctionStatusLabel.setText("");
+      auctionStatusLabel.setStyle("");
+      winnerLabel.setText("");
+      if (bidNotificationLabel != null) {
+        bidNotificationLabel.setVisible(false);
+        bidNotificationLabel.setManaged(false);
+      }
     }
 
-    // Reset per-auction state
-    userHasBid = false;
-    currentItemName = null;
-    lastKnownBalance = null;
-    currentPriceValue = null;
-    lastAutoBidStatus = null;
-
-    // Clear stale form state from previous navigation (controller is cached)
+    // Reset bid input on every navigation regardless of cache — the user must not see a stale
+    // typed amount from a previous visit get submitted accidentally.
     hideBidError();
     bidAmountField.clear();
     bidButton.setDisable(false);
-    if (balanceLabel != null) {
-      balanceLabel.setText("Số dư: đang tải...");
-      // Clear stale inline colour from a previous auction so the placeholder uses
-      // .balance-inline's slate tone instead of leftover red/green.
-      balanceLabel.setStyle("");
+
+    if (sameAsRendered) {
+      // Same auction as last paint → keep balanceLabel + autoBidStatusLabel + lastKnownBalance
+      // exactly as they were. loadAutoBidState() + the balance poll below will refresh them
+      // when the network response arrives, with no visible "Đang tải..." flicker.
+      userHasBid = false;
+    } else {
+      // Different auction (cached or fresh) → reset per-auction state and stale form fields.
+      userHasBid = false;
+      if (cached == null) {
+        currentItemName = null;
+        currentPriceValue = null;
+      }
+      lastKnownBalance = null;
+      lastAutoBidStatus = null;
+      if (balanceLabel != null) {
+        balanceLabel.setText("Số dư: đang tải...");
+        // Clear stale inline colour from the previous auction so the placeholder uses
+        // .balance-inline's slate tone instead of leftover red/green.
+        balanceLabel.setStyle("");
+      }
+      autoBidStatusLabel.setText("");
+      autoBidStatusLabel.setStyle("");
+      maxBidField.clear();
+      incrementField.clear();
+      applyAutoBidState(null, null, null, null);
     }
-    autoBidStatusLabel.setText("");
-    autoBidStatusLabel.setStyle("");
-    maxBidField.clear();
-    incrementField.clear();
-    applyAutoBidState(null, null, null, null);
 
     // Bind both columns to explicit 60/40 fractions of the available content width.
     // Both use hgrow=NEVER so HBox doesn't redistribute extra space on top of the binding.
@@ -268,15 +339,22 @@ public class AuctionDetailController implements Navigable {
     endedBox.maxWidthProperty().unbind();
     endedBox.maxWidthProperty().bind(leftColumn.widthProperty().multiply(0.6));
 
-    // Reset ended/bid box state for this navigation
-    endedBox.setVisible(false);
-    endedBox.setManaged(false);
-
-    // Always fully reset the chart so data from a previous session never bleeds through
-    bidSeries.getData().clear();
-    bidChart.getData().clear();
-    bidSeries.setName("Giá bid");
-    bidChart.getData().add(bidSeries);
+    if (!sameAsRendered && cached == null) {
+      // Fresh navigation — clear chart and endedBox so prior auction's data never bleeds through.
+      // When we have cached data, updateAuctionUI already painted the correct state above and
+      // loadBidHistory below will atomically replace the chart points; skipping the reset here
+      // avoids an empty-chart flash during the 1-2s refresh window.
+      endedBox.setVisible(false);
+      endedBox.setManaged(false);
+      bidSeries.getData().clear();
+      bidChart.getData().clear();
+      bidSeries.setName("Giá bid");
+      bidChart.getData().add(bidSeries);
+    } else if (bidChart.getData().isEmpty()) {
+      // Defensive: re-attach series if a previous reset cleared the chart.
+      bidSeries.setName("Giá bid");
+      bidChart.getData().add(bidSeries);
+    }
 
     bidChart.setLegendVisible(false);
 
@@ -357,7 +435,11 @@ public class AuctionDetailController implements Navigable {
             .watch(auctionId, token, currentItemName, sm.getCurrentUserId());
       }
     }
-    auctionId = null;
+    // NOTE: do NOT null auctionId here. navigateBack() does not call onDataReceived(), so if we
+    // clear the id on leaving, returning to this screen (e.g. detail → profile → back) lands in
+    // onNavigatedTo() with auctionId=null, which skips loadAuctionDetail() and leaves the UI
+    // frozen on "Đang tải...". Stale-id races are already guarded by the id.equals(auctionId)
+    // check in every async response callback, so keeping the previous id is safe.
   }
 
   // ========== FXML ACTIONS ==========
@@ -822,38 +904,45 @@ public class AuctionDetailController implements Navigable {
                   List<BidTransaction> bids =
                       RestClient.parseList(response.body(), BidTransaction.class);
                   Long currentUserId = SceneManager.getInstance().getCurrentUserId();
+                  // Build the new model OFF the FX thread so the swap on FX is atomic — no
+                  // intermediate clear+rebuild flicker on the chart/list.
+                  java.util.List<String> newItems = new java.util.ArrayList<>(bids.size());
+                  java.util.List<XYChart.Data<Number, Number>> newPoints =
+                      new java.util.ArrayList<>(bids.size());
+                  boolean foundMyBid = false;
+                  for (int i = 0; i < bids.size(); i++) {
+                    BidTransaction bid = bids.get(i);
+                    boolean isMyBid =
+                        currentUserId != null && currentUserId.equals(bid.getBidderId());
+                    if (isMyBid) {
+                      foundMyBid = true;
+                    }
+                    String bidderLabel =
+                        isMyBid
+                            ? "Bạn"
+                            : ("Bidder #" + (bid.getBidderId() != null ? bid.getBidderId() : "?"));
+                    newItems.add(
+                        0,
+                        String.format(
+                            "%s — %s",
+                            bidderLabel, bid.getAmount() != null ? vnd(bid.getAmount()) : "?"));
+                    if (bid.getAmount() != null) {
+                      newPoints.add(new XYChart.Data<>(i + 1, bid.getAmount().doubleValue()));
+                    }
+                  }
+                  final boolean userHasBidNow = foundMyBid;
+                  final int bidCount = bids.size();
                   Platform.runLater(
                       () -> {
                         if (!id.equals(auctionId)) {
                           return;
                         }
-                        bidHistoryItems.clear();
-                        bidSeries.getData().clear();
-                        for (int i = 0; i < bids.size(); i++) {
-                          BidTransaction bid = bids.get(i);
-                          boolean isMyBid =
-                              currentUserId != null && currentUserId.equals(bid.getBidderId());
-                          if (isMyBid) {
-                            userHasBid = true;
-                          }
-                          String bidderLabel =
-                              isMyBid
-                                  ? "Bạn"
-                                  : ("Bidder #"
-                                      + (bid.getBidderId() != null ? bid.getBidderId() : "?"));
-                          bidHistoryItems.add(
-                              0,
-                              String.format(
-                                  "%s — %s",
-                                  bidderLabel,
-                                  bid.getAmount() != null ? vnd(bid.getAmount()) : "?"));
-                          if (bid.getAmount() != null) {
-                            bidSeries
-                                .getData()
-                                .add(new XYChart.Data<>(i + 1, bid.getAmount().doubleValue()));
-                          }
-                        }
-                        updateTotalBidsLabel(bids.size());
+                        userHasBid = userHasBidNow;
+                        bidHistoryItems.setAll(newItems);
+                        bidSeries.getData().setAll(newPoints);
+                        updateTotalBidsLabel(bidCount);
+                        // Snapshot for instant re-render on revisit (see detailCache).
+                        bidHistoryCache.put(id, new java.util.ArrayList<>(newItems));
                       });
                 }
               } catch (Exception e) {
@@ -1174,10 +1263,18 @@ public class AuctionDetailController implements Navigable {
       markCountdownActive();
       startCountdown();
     } else {
-      // RUNNING (hoặc không xác định) — đếm ngược đến endTime
+      // RUNNING (hoặc không xác định) — đếm ngược đến endTime.
+      // Use the absolute endTime (not the server-snapshot remainingTimeMs) so re-rendering
+      // from the local cache after a navigation away/back still produces an accurate countdown.
       countdownToStart = false;
       pendingRunningEndTime = null;
-      endTimeMs = auction.getRemainingTimeMs();
+      if (auction.getEndTime() != null) {
+        endTimeMs =
+            java.time.Duration.between(java.time.LocalDateTime.now(), auction.getEndTime())
+                .toMillis();
+      } else {
+        endTimeMs = auction.getRemainingTimeMs();
+      }
       setTimerHeader(false);
       markCountdownActive();
       startCountdown();
@@ -1201,6 +1298,12 @@ public class AuctionDetailController implements Navigable {
         String prefix = "PAID".equals(status) ? "Đã thanh toán — " : "Người thắng: ";
         winnerLabel.setText(prefix + winner);
       }
+    }
+
+    // Snapshot for instant re-render on next visit.
+    if (auctionId != null) {
+      detailCache.put(auctionId, auction);
+      renderedAuctionId = auctionId;
     }
   }
 

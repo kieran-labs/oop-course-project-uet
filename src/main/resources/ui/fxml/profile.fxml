@@ -20,7 +20,9 @@
          <padding>
             <Insets bottom="0.0" left="20.0" right="20.0" top="0.0" />
          </padding>
-         <Button text="← Quay lại" styleClass="back-button" onAction="#goBack" />
+         <Button text="Quay lại" styleClass="back-button" onAction="#goBack">
+            <graphic><Region styleClass="back-icon" /></graphic>
+         </Button>
          <Label styleClass="app-logo" text="Hồ sơ cá nhân" />
          <Region HBox.hgrow="ALWAYS" />
       </HBox>
