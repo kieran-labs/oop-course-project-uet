@@ -12,6 +12,7 @@ import com.auction.pattern.observer.AuctionEventManager;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -327,8 +328,10 @@ public class AuctionScheduler {
                 // Lưu thông báo thắng cuộc cho bidder
                 String winMsg =
                     String.format(
-                        "Chúc mừng! Bạn đã thắng phiên đấu giá #%d với giá %,d VNĐ",
-                        auction.getId(), price.longValue());
+                        Locale.of("vi", "VN"),
+                        "Chúc mừng! Bạn đã thắng phiên đấu giá #%d với giá %,d VND",
+                        auction.getId(),
+                        price.longValue());
                 handle.execute(
                     "INSERT INTO notifications (user_id, message, notification_type) VALUES (?, ?, 'AUCTION_WON')",
                     winnerId,

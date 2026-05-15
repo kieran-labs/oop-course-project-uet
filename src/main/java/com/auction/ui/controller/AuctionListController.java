@@ -508,7 +508,8 @@ public class AuctionListController implements Navigable {
     }
     Long auctionId = Long.valueOf(matcher.group(1));
     String displayName = resolveAuctionDisplayName(auctionId);
-    String replacement = "tại phiên " + (displayName != null ? displayName : "#" + auctionId);
+    String replacement =
+        "tại phiên [" + (displayName != null ? displayName : "#" + auctionId) + "]";
     return notification.replaceFirst(
         "(?:tại\\s+)?(?:phiên\\s+)?#" + auctionId, Matcher.quoteReplacement(replacement));
   }
@@ -531,11 +532,10 @@ public class AuctionListController implements Navigable {
     if (!matcher.find()) {
       return null;
     }
-    // Normalize ky hieu tien te: doi "đ" / "₫" thanh "VND"
-    String priceText = matcher.group(1).replaceAll("[₫đĐ]", "").trim();
-    if (!priceText.toUpperCase().contains("VND")) {
-      priceText = priceText + " VND";
-    }
+    // Strip every currency suffix (VND, VNĐ, VN Đ, ₫, đ) and re-add canonical " VND"
+    // so legacy notifications stored with "VNĐ" don't render as "VN VND".
+    String priceText =
+        matcher.group(1).replaceAll("(?i)\\s*(?:VN\\s*Đ|VNĐ|VND|₫|đ)\\s*$", "").trim() + " VND";
     return new PriceSplit(
         text.substring(0, matcher.start()), priceText, text.substring(matcher.end()));
   }

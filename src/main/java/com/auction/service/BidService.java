@@ -21,6 +21,7 @@ import com.auction.util.MoneyValidator;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
@@ -174,8 +175,10 @@ public class BidService {
                           + " VALUES (?, ?, 'OUTBID')",
                       previousLeaderId,
                       String.format(
-                          "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VNĐ",
-                          auctionId, toIntegerVnd(amount, "Bid amount")));
+                          Locale.of("vi", "VN"),
+                          "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VND",
+                          auctionId,
+                          toIntegerVnd(amount, "Bid amount")));
                 }
 
                 BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, isAutoBid);
@@ -305,9 +308,11 @@ public class BidService {
                           + " VALUES (?, ?, 'AUTOBID_FAILED')",
                       bidderId,
                       String.format(
+                          Locale.of("vi", "VN"),
                           "Auto-bid cho phiên #%d không được kích hoạt:"
-                              + " maxBid thấp hơn giá đặt ban đầu (%,d VNĐ)",
-                          auctionId, toIntegerVnd(initialBid, "Initial bid")));
+                              + " maxBid thấp hơn giá đặt ban đầu (%,d VND)",
+                          auctionId,
+                          toIntegerVnd(initialBid, "Initial bid")));
                   return config;
                 }
 
@@ -322,8 +327,9 @@ public class BidService {
                           + " VALUES (?, ?, 'AUTOBID_FAILED')",
                       bidderId,
                       String.format(
+                          Locale.of("vi", "VN"),
                           "Auto-bid cho phiên #%d không được kích hoạt:"
-                              + " số dư không đủ. Cần %,d VNĐ, có %,d VNĐ",
+                              + " số dư không đủ. Cần %,d VND, có %,d VND",
                           auctionId,
                           toIntegerVnd(initialBid, "Initial bid"),
                           toIntegerVnd(bidder.getAvailableBalance(), "Available balance")));
@@ -368,8 +374,10 @@ public class BidService {
                           + " VALUES (?, ?, 'OUTBID')",
                       previousLeaderId,
                       String.format(
-                          "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VNĐ",
-                          auctionId, toIntegerVnd(initialBid, "Initial bid")));
+                          Locale.of("vi", "VN"),
+                          "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VND",
+                          auctionId,
+                          toIntegerVnd(initialBid, "Initial bid")));
                 }
 
                 BidTransaction tx = new BidTransaction(auctionId, bidderId, initialBid, true);
@@ -465,8 +473,10 @@ public class BidService {
           "INSERT INTO notifications (user_id, message, notification_type) VALUES (?, ?, 'OUTBID')",
           previousLeaderId,
           String.format(
-              "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VNĐ",
-              auctionId, toIntegerVnd(amount, "Bid amount")));
+              Locale.of("vi", "VN"),
+              "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VND",
+              auctionId,
+              toIntegerVnd(amount, "Bid amount")));
     }
 
     BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, true);

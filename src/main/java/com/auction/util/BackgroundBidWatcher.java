@@ -136,7 +136,7 @@ public class BackgroundBidWatcher {
                   String priceStr = price != null ? fmt.format(price) + " VND" : "?";
                   // Format: dong 1 = mo ta, dong 2 = gia (splitCurrentPrice se to vang)
                   String notification =
-                      "Bạn đã bị vượt giá tại phiên " + name + ". Giá hiện tại: " + priceStr;
+                      "Bạn đã bị vượt giá tại phiên [" + name + "]. Giá hiện tại: " + priceStr;
                   Platform.runLater(() -> NotificationStore.getInstance().add(notification));
                 }
               }
@@ -147,9 +147,9 @@ public class BackgroundBidWatcher {
                   NumberFormat fmt = NumberFormat.getNumberInstance(Locale.of("vi", "VN"));
                   String priceStr = price != null ? fmt.format(price) + " VND" : "?";
                   String notification =
-                      "Auto-bid đặt giá thành công tại phiên "
+                      "Auto-bid đặt giá thành công tại phiên ["
                           + name
-                          + ". Giá hiện tại: "
+                          + "]. Giá hiện tại: "
                           + priceStr;
                   Platform.runLater(() -> NotificationStore.getInstance().add(notification));
                 }
@@ -157,8 +157,9 @@ public class BackgroundBidWatcher {
               case BidUpdateMessage.TYPE_AUCTION_ENDED -> {
                 String winner = msg.getLeadingBidderUsername();
                 String notification =
-                    "🏁 Phiên kết thúc: "
+                    "🏁 Phiên kết thúc: ["
                         + name
+                        + "]"
                         + (winner != null ? " — Người thắng: " + winner : "");
                 Platform.runLater(
                     () -> {

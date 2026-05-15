@@ -18,6 +18,7 @@ import io.javalin.websocket.WsContext;
 import io.javalin.websocket.WsErrorContext;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -296,6 +297,7 @@ public class AuctionWebSocketHandler {
     String message =
         approved
             ? String.format(
+                Locale.of("vi", "VN"),
                 "Yêu cầu nạp tiền đã được duyệt. Số dư biến động: + %,d VND",
                 balanceDelta != null ? balanceDelta.longValue() : 0)
             : "Yêu cầu nạp tiền đã bị từ chối.";
