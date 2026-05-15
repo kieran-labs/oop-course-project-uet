@@ -796,7 +796,7 @@ public class AuctionListController implements Navigable {
               private final Button btnEnter = new Button("Xem");
 
               {
-                btnEnter.setStyle("-fx-cursor: hand;");
+                btnEnter.getStyleClass().add("table-action-view");
                 btnEnter.setMinWidth(60);
                 btnEnter.setOnAction(
                     e -> {

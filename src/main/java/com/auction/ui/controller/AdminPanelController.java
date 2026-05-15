@@ -477,8 +477,9 @@ public class AdminPanelController implements Navigable {
 
               {
                 box.setMinWidth(200);
-                deleteBtn.setStyle(
-                    "-fx-background-color: #991B1B; -fx-text-fill: white; -fx-cursor: hand;");
+                viewBtn.getStyleClass().add("table-action-view");
+                cancelBtn.getStyleClass().add("table-action-cancel");
+                deleteBtn.getStyleClass().add("table-action-delete");
                 viewBtn.setOnAction(
                     e -> {
                       AuctionResponse a = getTableView().getItems().get(getIndex());
@@ -531,6 +532,7 @@ public class AdminPanelController implements Navigable {
               private final Button deleteBtn = new Button("Xóa");
 
               {
+                deleteBtn.getStyleClass().add("table-action-delete");
                 deleteBtn.setOnAction(
                     e -> {
                       UserResponse u = getTableView().getItems().get(getIndex());
