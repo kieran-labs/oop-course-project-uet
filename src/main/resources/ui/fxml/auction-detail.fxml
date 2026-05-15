@@ -42,7 +42,7 @@
              visible="false" managed="false"
              alignment="CENTER"
              maxWidth="Infinity"
-             style="-fx-background-color: #1565c0; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 10 20 10 20; -fx-font-weight: bold;" />
+             style="-fx-background-color: #1565C0; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 10 20 10 20; -fx-font-weight: bold;" />
       <HBox fx:id="contentHBox" spacing="20.0" VBox.vgrow="ALWAYS">
          <padding>
             <Insets bottom="24.0" left="24.0" right="24.0" top="22.0" />
@@ -102,8 +102,7 @@
                <HBox alignment="CENTER_LEFT" spacing="0.0">
                   <Label styleClass="section-title" text="Đặt giá thủ công" />
                   <Region HBox.hgrow="ALWAYS" />
-                  <Label fx:id="balanceLabel" text="Số dư: —"
-                         style="-fx-font-size: 11px; -fx-text-fill: #90a4ae;" />
+                  <Label fx:id="balanceLabel" text="Số dư: —" styleClass="balance-inline" />
                </HBox>
                <HBox spacing="10.0" alignment="CENTER_LEFT">
                   <TextField fx:id="bidAmountField" promptText="Nhập số tiền (VND)"
@@ -137,7 +136,7 @@
                           styleClass="secondary-button" onAction="#handleCancelAutoBid" />
                   <Label fx:id="autoBidSpinner" text="⚙"
                          visible="false" managed="false"
-                         style="-fx-font-family: 'Segoe UI Symbol'; -fx-font-size: 48px; -fx-text-fill: #1976d2; -fx-font-weight: bold; -fx-padding: -7 0 -7 0;" />
+                         style="-fx-font-family: 'Segoe UI Symbol'; -fx-font-size: 48px; -fx-text-fill: #1565C0; -fx-font-weight: bold; -fx-padding: -7 0 -7 0;" />
                </HBox>
                <Label fx:id="autoBidStatusLabel" styleClass="detail-text" text=""
                       wrapText="true" />
@@ -174,8 +173,7 @@
             <HBox alignment="CENTER_LEFT" spacing="10.0">
                <Label styleClass="section-title" text="Lịch sử đặt giá" />
                <Region HBox.hgrow="ALWAYS" />
-               <Label fx:id="totalBidsLabel" text="0 lượt"
-                      style="-fx-text-fill: #90a4ae; -fx-font-size: 12px; -fx-font-weight: bold;" />
+               <Label fx:id="totalBidsLabel" text="0 lượt" styleClass="muted-caption" />
             </HBox>
             <ListView fx:id="bidHistoryList" VBox.vgrow="ALWAYS"
                       styleClass="bid-history-list" />

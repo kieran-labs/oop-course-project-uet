@@ -446,11 +446,11 @@ public class AdminPanelController implements Navigable {
                     empty || status == null
                         ? ""
                         : switch (status) {
-                          case "RUNNING" -> "-fx-text-fill: #00c853; -fx-font-weight: bold;";
-                          case "OPEN" -> "-fx-text-fill: #2196f3; -fx-font-weight: bold;";
-                          case "FINISHED" -> "-fx-text-fill: #9e9e9e;";
-                          case "CANCELED" -> "-fx-text-fill: #e53935;";
-                          case "PAID" -> "-fx-text-fill: #7b1fa2;";
+                          case "RUNNING" -> "-fx-text-fill: #16A34A; -fx-font-weight: bold;";
+                          case "OPEN" -> "-fx-text-fill: #1565C0; -fx-font-weight: bold;";
+                          case "FINISHED" -> "-fx-text-fill: #64748B;";
+                          case "CANCELED" -> "-fx-text-fill: #DC2626;";
+                          case "PAID" -> "-fx-text-fill: #9333EA;";
                           default -> "";
                         });
               }
@@ -478,7 +478,7 @@ public class AdminPanelController implements Navigable {
               {
                 box.setMinWidth(200);
                 deleteBtn.setStyle(
-                    "-fx-background-color: #880e4f; -fx-text-fill: white; -fx-cursor: hand;");
+                    "-fx-background-color: #991B1B; -fx-text-fill: white; -fx-cursor: hand;");
                 viewBtn.setOnAction(
                     e -> {
                       AuctionResponse a = getTableView().getItems().get(getIndex());
@@ -654,8 +654,8 @@ public class AdminPanelController implements Navigable {
               private final HBox box = new HBox(6, approveBtn, rejectBtn);
 
               {
-                approveBtn.setStyle("-fx-background-color: #43a047; -fx-text-fill: white;");
-                rejectBtn.setStyle("-fx-background-color: #e53935; -fx-text-fill: white;");
+                approveBtn.getStyleClass().add("approve-button");
+                rejectBtn.getStyleClass().add("reject-button");
                 approveBtn.setOnAction(
                     e -> {
                       DepositRecord r = getTableView().getItems().get(getIndex());
@@ -706,8 +706,8 @@ public class AdminPanelController implements Navigable {
               private final HBox box = new HBox(6, approveBtn, rejectBtn);
 
               {
-                approveBtn.setStyle("-fx-background-color: #43a047; -fx-text-fill: white;");
-                rejectBtn.setStyle("-fx-background-color: #e53935; -fx-text-fill: white;");
+                approveBtn.getStyleClass().add("approve-button");
+                rejectBtn.getStyleClass().add("reject-button");
                 approveBtn.setOnAction(
                     e -> {
                       PasswordResetRecord r = getTableView().getItems().get(getIndex());
