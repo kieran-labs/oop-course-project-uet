@@ -322,7 +322,10 @@ public class AuctionListController implements Navigable {
         items.getChildren().add(row.node());
       }
       scrollPane = new ScrollPane(items);
-      scrollPane.setMaxHeight(400);
+      // Always reserve a tall viewport so the popup doesn't collapse to a single-row height
+      // when the user only has 1–2 notifications.
+      scrollPane.setPrefViewportHeight(600);
+      scrollPane.setMaxHeight(600);
       scrollPane.setFitToWidth(true);
       scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
       scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
