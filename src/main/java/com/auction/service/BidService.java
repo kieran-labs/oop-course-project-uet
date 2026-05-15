@@ -203,7 +203,7 @@ public class BidService {
                           executeChainBidInHandle(h, aid, bid, amt, postCommitEvents));
                 }
 
-                LOGGER.info(
+                LOGGER.debug(
                     "Bid đặt thành công: auction={}, bidder={}, amount={}, autoBid={}",
                     auctionId,
                     bidderId,

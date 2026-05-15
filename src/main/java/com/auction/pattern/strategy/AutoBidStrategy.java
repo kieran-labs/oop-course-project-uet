@@ -144,7 +144,7 @@ public class AutoBidStrategy {
       AutoBidConfig config = queue.poll();
       AutoBidConfig freshConfig = autoBidConfigDao.findById(config.getId()).orElse(null);
       if (freshConfig == null || !freshConfig.isActive()) {
-        LOGGER.info("Auto-bid config #{} was deactivated mid-chain — skipping", config.getId());
+        LOGGER.debug("Auto-bid config #{} was deactivated mid-chain — skipping", config.getId());
         continue;
       }
       config = freshConfig;
@@ -163,7 +163,7 @@ public class AutoBidStrategy {
         config.setFailureReason(AutoBidFailureReason.MAX_PRICE_TOO_LOW);
         try {
           autoBidConfigDao.update(config);
-          LOGGER.info(
+          LOGGER.debug(
               "Auto-bid hết budget cho bidder={} trong phiên={}", config.getBidderId(), auctionId);
         } catch (Exception e) {
           LOGGER.error(
@@ -188,7 +188,7 @@ public class AutoBidStrategy {
             currentLeaderId = freshSkippedConfig.getBidderId();
             autoBidCount++;
             queue.offer(freshSkippedConfig);
-            LOGGER.info(
+            LOGGER.debug(
                 "Auto-bid thành công: bidder={}, amount={}, phiên={}",
                 freshSkippedConfig.getBidderId(),
                 nextAmount,
@@ -217,7 +217,7 @@ public class AutoBidStrategy {
         queue.offer(config);
         queue.addAll(skippedLeaderConfigs);
         skippedLeaderConfigs.clear();
-        LOGGER.info(
+        LOGGER.debug(
             "Auto-bid thành công: bidder={}, amount={}, phiên={}",
             config.getBidderId(),
             nextAmount,
@@ -279,7 +279,7 @@ public class AutoBidStrategy {
       AutoBidConfig fresh =
           autoBidConfigDao.findByIdInTransaction(handle, config.getId()).orElse(null);
       if (fresh == null || !fresh.isActive()) {
-        LOGGER.info("Auto-bid config #{} deactivated mid-chain — skipping", config.getId());
+        LOGGER.debug("Auto-bid config #{} deactivated mid-chain — skipping", config.getId());
         continue;
       }
       config = fresh;
@@ -303,7 +303,7 @@ public class AutoBidStrategy {
                 "Auto-bid của bạn cho phiên #%d đã hết hạn mức:"
                     + " maxBid không đủ để tiếp tục (giá hiện tại: %,d VNĐ)",
                 auctionId, toIntegerVnd(currentPrice, "Current price")));
-        LOGGER.info("Auto-bid EXHAUSTED: bidder={}, auction={}", config.getBidderId(), auctionId);
+        LOGGER.debug("Auto-bid EXHAUSTED: bidder={}, auction={}", config.getBidderId(), auctionId);
         for (AutoBidConfig skipped : skippedLeaderConfigs) {
           queue.offer(skipped);
         }
@@ -329,7 +329,7 @@ public class AutoBidStrategy {
                 auctionId,
                 toIntegerVnd(nextAmount, "Next auto-bid amount"),
                 toIntegerVnd(bidder.getAvailableBalance(), "Available balance")));
-        LOGGER.info(
+        LOGGER.debug(
             "Auto-bid FAILED (balance): bidder={}, auction={}", config.getBidderId(), auctionId);
         for (AutoBidConfig skipped : skippedLeaderConfigs) {
           queue.offer(skipped);
@@ -347,7 +347,7 @@ public class AutoBidStrategy {
       queue.offer(config);
       queue.addAll(skippedLeaderConfigs);
       skippedLeaderConfigs.clear();
-      LOGGER.info(
+      LOGGER.debug(
           "Auto-bid thành công: bidder={}, amount={}, phiên={}",
           config.getBidderId(),
           nextAmount,
