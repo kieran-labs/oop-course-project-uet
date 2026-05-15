@@ -27,7 +27,9 @@
          <Label styleClass="app-logo" text="Auction House" />
          <Region HBox.hgrow="ALWAYS" />
          <Label fx:id="usernameLabel" styleClass="username-label" text="Người dùng"
-                onMouseClicked="#handleProfile" />
+                onMouseClicked="#handleProfile">
+            <graphic><Region styleClass="user-icon" /></graphic>
+         </Label>
          <!-- Notification bell — only visible for BIDDER role -->
          <StackPane fx:id="bellPane" visible="false" managed="false">
             <Button fx:id="bellButton" styleClass="bell-button" onAction="#handleBellClick">
@@ -38,7 +40,9 @@
                    translateX="5.0" translateY="9.0"
                    visible="false" managed="false" />
          </StackPane>
-         <Button styleClass="logout-button" text="Đăng xuất" onAction="#handleLogout" />
+         <Button styleClass="logout-button" text="Đăng xuất" onAction="#handleLogout">
+            <graphic><Region styleClass="logout-icon" /></graphic>
+         </Button>
       </HBox>
    </top>
 

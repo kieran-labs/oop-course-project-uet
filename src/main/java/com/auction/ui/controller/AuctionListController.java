@@ -20,6 +20,10 @@ import java.util.regex.Pattern;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
+import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -115,6 +119,13 @@ public class AuctionListController implements Navigable {
   private Timeline balancePollTimeline;
   private javafx.beans.value.ChangeListener<Number> notificationListener;
   private BigDecimal lastKnownBalance;
+
+  /**
+   * Ticked once per second by {@link #tableCountdownTimeline}. The time + status cells listen to
+   * this property and redraw only themselves on each tick, instead of relying on {@code
+   * auctionTable.refresh()} which rebuilt every cell and made hovered rows flash.
+   */
+  private final IntegerProperty timerTick = new SimpleIntegerProperty(0);
 
   // ========== JAVAFX INITIALIZE ==========
 
@@ -695,20 +706,33 @@ public class AuctionListController implements Navigable {
     timeCol.setCellFactory(
         col ->
             new TableCell<>() {
+              // Held strongly so the WeakChangeListener attached to timerTick isn't GC'd before
+              // this cell is. When the cell itself becomes unreferenced, the weak wrapper lets
+              // timerTick release the listener and the cell.
+              private final ChangeListener<Number> tickListener = (obs, oldV, newV) -> redraw();
+
               {
                 setWrapText(true);
                 setAlignment(javafx.geometry.Pos.CENTER);
+                timerTick.addListener(new WeakChangeListener<>(tickListener));
               }
 
               @Override
               protected void updateItem(Long ignored, boolean empty) {
                 super.updateItem(ignored, empty);
-                if (empty) {
+                redraw();
+              }
+
+              private void redraw() {
+                // Tooltip is only meaningful while the row is OPEN; clear at the start of every
+                // redraw so a stale "Bắt đầu sau: ..." doesn't follow the row into RUNNING/ENDED.
+                setTooltip(null);
+                if (isEmpty() || getTableRow() == null) {
                   setText(null);
                   setStyle("");
                   return;
                 }
-                AuctionResponse a = getTableRow() != null ? getTableRow().getItem() : null;
+                AuctionResponse a = getTableRow().getItem();
                 if (a == null) {
                   setText(null);
                   setStyle("");
@@ -723,7 +747,8 @@ public class AuctionListController implements Navigable {
                 setStyle("");
                 LocalDateTime now = LocalDateTime.now();
                 if ("OPEN".equals(st)) {
-                  // Phien chua bat dau: hien thi thoi gian den khi bat dau
+                  // Phien chua bat dau: hien thi thoi gian den khi bat dau, format hai dong de
+                  // dong bo voi card "BAT DAU SAU / HH:MM:SS" ben man hinh chi tiet.
                   LocalDateTime startTime = a.getStartTime();
                   if (startTime == null) {
                     setText("—");
@@ -738,7 +763,7 @@ public class AuctionListController implements Navigable {
                     long m = (totalSec % 3600) / 60;
                     long s = totalSec % 60;
                     String timeStr = String.format("%02d:%02d:%02d", h, m, s);
-                    setText("BD: " + timeStr);
+                    setText("Bắt đầu sau:\n" + timeStr);
                     setTooltip(new javafx.scene.control.Tooltip("Bắt đầu sau: " + timeStr));
                   }
                 } else {
@@ -767,26 +792,36 @@ public class AuctionListController implements Navigable {
     statusCol.setCellFactory(
         col ->
             new TableCell<>() {
+              private final ChangeListener<Number> tickListener = (obs, oldV, newV) -> redraw();
+
+              {
+                timerTick.addListener(new WeakChangeListener<>(tickListener));
+              }
+
               @Override
               protected void updateItem(String status, boolean empty) {
                 super.updateItem(status, empty);
-                if (empty || status == null) {
+                redraw();
+              }
+
+              private void redraw() {
+                if (isEmpty() || getTableRow() == null || getTableRow().getItem() == null) {
                   setText(null);
                   setStyle("");
-                } else {
-                  // Tinh status tu thoi gian phia client de hien thi luc tuc
-                  String effective = computeClientStatus(getTableRow().getItem());
-                  setText(effective);
-                  String color =
-                      switch (effective) {
-                        case "RUNNING" -> "-fx-text-fill: #16A34A; -fx-font-weight: bold;";
-                        case "OPEN" -> "-fx-text-fill: #1565C0; -fx-font-weight: bold;";
-                        case "FINISHED", "PAID" -> "-fx-text-fill: #64748B;";
-                        case "CANCELED" -> "-fx-text-fill: #DC2626;";
-                        default -> "";
-                      };
-                  setStyle(color);
+                  return;
                 }
+                // Tinh status tu thoi gian phia client de hien thi luc tuc
+                String effective = computeClientStatus(getTableRow().getItem());
+                setText(effective);
+                String color =
+                    switch (effective) {
+                      case "RUNNING" -> "-fx-text-fill: #16A34A; -fx-font-weight: bold;";
+                      case "OPEN" -> "-fx-text-fill: #1565C0; -fx-font-weight: bold;";
+                      case "FINISHED", "PAID" -> "-fx-text-fill: #64748B;";
+                      case "CANCELED" -> "-fx-text-fill: #DC2626;";
+                      default -> "";
+                    };
+                setStyle(color);
               }
             });
     actionCol.setMinWidth(80);
@@ -846,8 +881,12 @@ public class AuctionListController implements Navigable {
    */
   private void startTableCountdown() {
     stopTableCountdown();
+    // Increment timerTick instead of calling auctionTable.refresh(): refresh() rebuilds every
+    // cell every second, which interrupts the :hover pseudo-class on the row under the cursor
+    // and produces the visible flash. Time / status cells listen to timerTick and redraw only
+    // themselves, leaving every other cell (including the hovered row's background) untouched.
     tableCountdownTimeline =
-        new Timeline(new KeyFrame(Duration.seconds(1), e -> auctionTable.refresh()));
+        new Timeline(new KeyFrame(Duration.seconds(1), e -> timerTick.set(timerTick.get() + 1)));
     tableCountdownTimeline.setCycleCount(Timeline.INDEFINITE);
     tableCountdownTimeline.play();
   }
