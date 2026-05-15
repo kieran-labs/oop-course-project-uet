@@ -4,6 +4,7 @@ import at.favre.lib.crypto.bcrypt.BCrypt;
 import com.auction.config.JwtUtil;
 import com.auction.dao.DepositRequestDao;
 import com.auction.dao.UserDao;
+import com.auction.dao.WalletTransactionDao;
 import com.auction.dto.ChangePasswordRequest;
 import com.auction.dto.LoginRequest;
 import com.auction.dto.RegisterRequest;
@@ -280,6 +281,15 @@ public class UserService {
               .bind("balance", user.getBalance())
               .bind("id", user.getId())
               .execute();
+
+          WalletTransactionDao.insert(
+              handle,
+              record.getUserId(),
+              null,
+              null,
+              "DEPOSIT",
+              record.getAmount(),
+              "deposit_request:" + record.getId());
 
           depositRequestDao.transitionStatusInTransaction(handle, requestId, "PENDING", "APPROVED");
 
