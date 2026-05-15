@@ -189,14 +189,49 @@
     -fx-text-fill: #FFFFFF;
 }
 
+/* Clickable user pill in the top bar — opens Profile. Height matches
+   .logout-button (34px) so the two top-bar chips line up. */
 .username-label {
     -fx-font-size: 13px;
     -fx-font-weight: bold;
-    -fx-text-fill: rgba(255,255,255,0.92);
-    -fx-background-color: rgba(255,255,255,0.14);
+    -fx-text-fill: rgba(255,255,255,0.94);
+    -fx-background-color: rgba(255,255,255,0.16);
+    -fx-border-color: rgba(255,255,255,0.32);
+    -fx-border-width: 1.2;
     -fx-background-radius: 20;
-    -fx-padding: 6 14 6 14;
+    -fx-border-radius: 20;
+    -fx-padding: 0 16 0 12;
+    -fx-pref-height: 34;
+    -fx-min-height: 34;
+    -fx-graphic-text-gap: 8;
     -fx-cursor: hand;
+}
+
+.username-label:hover {
+    -fx-background-color: rgba(255,255,255,0.30);
+    -fx-text-fill: white;
+    -fx-border-color: rgba(255,255,255,0.65);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.22), 8, 0, 0, 2);
+}
+
+.username-label:pressed {
+    -fx-background-color: rgba(255,255,255,0.10);
+    -fx-border-color: rgba(255,255,255,0.30);
+    -fx-effect: none;
+}
+
+/* Material "account_circle" — sits left of the username, matches the
+   white-on-navy back-icon visually. */
+.user-icon {
+    -fx-shape: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z";
+    -fx-background-color: white;
+    -fx-min-width: 18;
+    -fx-min-height: 18;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-max-width: 18;
+    -fx-max-height: 18;
+    -fx-scale-shape: true;
 }
 
 /* ----------------------------------------------------------------
@@ -458,7 +493,7 @@
 .table-action-view,
 .table-action-cancel,
 .table-action-delete {
-    -fx-font-size: 12px;
+    -fx-font-size: 13px;
     -fx-font-weight: bold;
     -fx-background-radius: 7;
     -fx-border-radius: 7;
@@ -522,7 +557,7 @@
    subtle shadow so it pops against the white row without dominating.
    Geometry matches .table-action-* so per-row toolbars line up. */
 .approve-button {
-    -fx-font-size: 12px;
+    -fx-font-size: 13px;
     -fx-font-weight: bold;
     -fx-text-fill: #FFFFFF;
     -fx-background-color: linear-gradient(to bottom, #22C55E 0%, #16A34A 100%);
@@ -547,7 +582,7 @@
 
 /* Solid red — admin "Từ chối" actions inside tables. */
 .reject-button {
-    -fx-font-size: 12px;
+    -fx-font-size: 13px;
     -fx-font-weight: bold;
     -fx-text-fill: #FFFFFF;
     -fx-background-color: linear-gradient(to bottom, #EF4444 0%, #DC2626 100%);
@@ -624,7 +659,8 @@
 }
 
 /* Top-bar logout — bold weight + firmer border for readability on the
-   gradient header. Translucent glass-on-navy look. */
+   gradient header. Geometry matches .username-label so the two chips
+   read as a unified pair on the right side of the top bar. */
 .logout-button {
     -fx-font-size: 13px;
     -fx-font-weight: bold;
@@ -634,20 +670,36 @@
     -fx-border-width: 1.2;
     -fx-background-radius: 8;
     -fx-border-radius: 8;
-    -fx-padding: 0 18 0 18;
+    -fx-padding: 0 16 0 12;
     -fx-pref-height: 34;
     -fx-min-height: 34;
+    -fx-graphic-text-gap: 8;
     -fx-cursor: hand;
 }
 
 .logout-button:hover {
-    -fx-background-color: rgba(255,255,255,0.28);
+    -fx-background-color: rgba(255,255,255,0.30);
     -fx-border-color: rgba(255,255,255,0.70);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.22), 8, 0, 0, 2);
 }
 
 .logout-button:pressed {
     -fx-background-color: rgba(255,255,255,0.08);
     -fx-border-color: rgba(255,255,255,0.30);
+    -fx-effect: none;
+}
+
+/* Material "logout" — door + arrow, sits left of "Đăng xuất". */
+.logout-icon {
+    -fx-shape: "M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z";
+    -fx-background-color: white;
+    -fx-min-width: 16;
+    -fx-min-height: 16;
+    -fx-pref-width: 16;
+    -fx-pref-height: 16;
+    -fx-max-width: 16;
+    -fx-max-height: 16;
+    -fx-scale-shape: true;
 }
 
 .back-button {
@@ -767,6 +819,16 @@
 .text-field:focused {
     -fx-border-color: #1565C0;
     -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.16), 6, 0, 0, 0);
+}
+
+/* PasswordField uses the field's font glyph for its bullets. Lexend's "•"
+   renders chunky and aliased at 14px because the glyph is a small filled
+   ring scaled hard by grayscale AA. Switch the password fields to system
+   fonts that ship with crisp, well-hinted bullet glyphs at small sizes,
+   and drop one pixel off so the masking circles look more delicate. */
+.password-field {
+    -fx-font-family: 'Segoe UI', 'Helvetica Neue', 'Arial', 'Lexend';
+    -fx-font-size: 13px;
 }
 
 .text-area {
@@ -1030,8 +1092,8 @@
     -fx-background-color: #FFFFFF;
     -fx-border-color: transparent transparent #F1F5F9 transparent;
     -fx-border-width: 0 0 1 0;
-    -fx-pref-height: 46;
-    -fx-min-height: 46;
+    -fx-pref-height: 54;
+    -fx-min-height: 54;
 }
 
 .auction-table .table-row-cell:odd {
