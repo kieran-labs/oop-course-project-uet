@@ -4,6 +4,7 @@ import com.auction.dao.AuctionDao;
 import com.auction.dao.AutoBidConfigDao;
 import com.auction.dao.BidTransactionDao;
 import com.auction.dao.UserDao;
+import com.auction.dao.WalletTransactionDao;
 import com.auction.dto.BidUpdateMessage;
 import com.auction.exception.InvalidBidException;
 import com.auction.exception.NotFoundException;
@@ -155,6 +156,14 @@ public class BidService {
                 if (previousLeaderId != null) {
                   userDao.releaseReservedBalanceInTransaction(
                       handle, previousLeaderId, previousPrice);
+                  WalletTransactionDao.insert(
+                      handle,
+                      previousLeaderId,
+                      auctionId,
+                      null,
+                      "RELEASE",
+                      previousPrice,
+                      "outbid_by:" + bidderId);
                 }
                 userDao.updateReservedBalanceInTransaction(handle, bidderId, amount);
                 auctionDao.updateInTransaction(handle, auction);
@@ -171,6 +180,14 @@ public class BidService {
 
                 BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, isAutoBid);
                 BidTransaction saved = bidTransactionDao.insert(handle, tx);
+                WalletTransactionDao.insert(
+                    handle,
+                    bidderId,
+                    auctionId,
+                    saved.getId(),
+                    "FREEZE",
+                    amount,
+                    isAutoBid ? "auto_bid" : "manual_bid");
 
                 final Auction auctionSnap = auction;
                 postCommitEvents.add(
@@ -333,6 +350,14 @@ public class BidService {
                 if (previousLeaderId != null) {
                   userDao.releaseReservedBalanceInTransaction(
                       handle, previousLeaderId, previousPrice);
+                  WalletTransactionDao.insert(
+                      handle,
+                      previousLeaderId,
+                      auctionId,
+                      null,
+                      "RELEASE",
+                      previousPrice,
+                      "outbid_by:" + bidderId);
                 }
                 userDao.updateReservedBalanceInTransaction(handle, bidderId, initialBid);
                 auctionDao.updateInTransaction(handle, auction);
@@ -348,7 +373,15 @@ public class BidService {
                 }
 
                 BidTransaction tx = new BidTransaction(auctionId, bidderId, initialBid, true);
-                bidTransactionDao.insert(handle, tx);
+                BidTransaction savedBid = bidTransactionDao.insert(handle, tx);
+                WalletTransactionDao.insert(
+                    handle,
+                    bidderId,
+                    auctionId,
+                    savedBid.getId(),
+                    "FREEZE",
+                    initialBid,
+                    "auto_bid_initial");
 
                 AutoBidConfig config = new AutoBidConfig(auctionId, bidderId, maxBid, increment);
                 autoBidConfigDao.upsertInTransaction(handle, config);
@@ -415,6 +448,14 @@ public class BidService {
 
     if (previousLeaderId != null) {
       userDao.releaseReservedBalanceInTransaction(handle, previousLeaderId, previousPrice);
+      WalletTransactionDao.insert(
+          handle,
+          previousLeaderId,
+          auctionId,
+          null,
+          "RELEASE",
+          previousPrice,
+          "outbid_by:" + bidderId);
     }
     userDao.updateReservedBalanceInTransaction(handle, bidderId, amount);
     auctionDao.updateInTransaction(handle, auction);
@@ -430,6 +471,8 @@ public class BidService {
 
     BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, true);
     BidTransaction saved = bidTransactionDao.insert(handle, tx);
+    WalletTransactionDao.insert(
+        handle, bidderId, auctionId, saved.getId(), "FREEZE", amount, "auto_bid_chain");
 
     final Auction auctionSnap = auction;
     postCommitEvents.add(() -> notifyBidUpdate(auctionSnap, auctionId, bidderId, amount, true));

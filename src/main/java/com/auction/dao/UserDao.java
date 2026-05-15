@@ -431,7 +431,8 @@ public class UserDao {
           (SELECT COUNT(*) FROM auto_bid_configs WHERE bidder_id = :userId) +
           (SELECT COUNT(*) FROM deposit_requests WHERE user_id = :userId) +
           (SELECT COUNT(*) FROM password_reset_requests WHERE user_id = :userId) +
-          (SELECT COUNT(*) FROM notifications WHERE user_id = :userId)
+          (SELECT COUNT(*) FROM notifications WHERE user_id = :userId) +
+          (SELECT COUNT(*) FROM wallet_transactions WHERE user_id = :userId)
         ) > 0
         """;
 

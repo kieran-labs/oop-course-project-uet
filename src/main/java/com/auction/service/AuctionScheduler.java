@@ -3,6 +3,7 @@ package com.auction.service;
 import com.auction.dao.AuctionDao;
 import com.auction.dao.ItemDao;
 import com.auction.dao.UserDao;
+import com.auction.dao.WalletTransactionDao;
 import com.auction.dto.BidUpdateMessage;
 import com.auction.model.Auction;
 import com.auction.model.AuctionStatus;
@@ -275,6 +276,14 @@ public class AuctionScheduler {
                           + winnerId
                           + " không đủ");
                 }
+                WalletTransactionDao.insert(
+                    handle,
+                    winnerId,
+                    auction.getId(),
+                    null,
+                    "WIN_CONSUME",
+                    price,
+                    "settlement:" + auction.getId());
                 LOG.info("Phiên #{}: trừ {} từ bidder #{}", auction.getId(), price, winnerId);
                 LOG.info(
                     "Phiên #{}: bidder #{} balance {} → {}",
@@ -296,6 +305,14 @@ public class AuctionScheduler {
                       .bind("price", price)
                       .bind("userId", sellerId)
                       .execute();
+                  WalletTransactionDao.insert(
+                      handle,
+                      sellerId,
+                      auction.getId(),
+                      null,
+                      "SELLER_PAYOUT",
+                      price,
+                      "settlement:" + auction.getId());
                   LOG.info("Phiên #{}: cộng {} cho seller #{}", auction.getId(), price, sellerId);
                   LOG.info(
                       "Phiên #{}: seller #{} balance {} → {}",
@@ -324,6 +341,14 @@ public class AuctionScheduler {
                     balance,
                     price);
                 userDao.releaseReservedBalanceInTransaction(handle, winnerId, price);
+                WalletTransactionDao.insert(
+                    handle,
+                    winnerId,
+                    auction.getId(),
+                    null,
+                    "RELEASE",
+                    price,
+                    "settlement_insufficient_balance:" + auction.getId());
                 auction.setStatus(AuctionStatus.FINISHED);
               }
             } else {

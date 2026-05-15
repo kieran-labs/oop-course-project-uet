@@ -4,6 +4,7 @@ import com.auction.dao.AuctionDao;
 import com.auction.dao.BidTransactionDao;
 import com.auction.dao.ItemDao;
 import com.auction.dao.UserDao;
+import com.auction.dao.WalletTransactionDao;
 import com.auction.dto.AuctionResponse;
 import com.auction.dto.BidUpdateMessage;
 import com.auction.dto.CreateAuctionRequest;
@@ -445,6 +446,14 @@ public class AuctionService {
           if (previousStatus == AuctionStatus.RUNNING && auction.getLeadingBidderId() != null) {
             userDao.releaseReservedBalanceInTransaction(
                 handle, auction.getLeadingBidderId(), auction.getCurrentPrice());
+            WalletTransactionDao.insert(
+                handle,
+                auction.getLeadingBidderId(),
+                auction.getId(),
+                null,
+                "CANCEL_RELEASE",
+                auction.getCurrentPrice(),
+                "auction_cancel:" + auction.getId());
           }
           auctionDao.updateInTransaction(handle, auction);
           insertCancellationNotificationInTransaction(handle, auction, previousStatus);
