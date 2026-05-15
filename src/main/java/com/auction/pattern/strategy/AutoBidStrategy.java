@@ -3,7 +3,6 @@ package com.auction.pattern.strategy;
 import com.auction.dao.AutoBidConfigDao;
 import com.auction.dao.UserDao;
 import com.auction.exception.InvalidBidException;
-import com.auction.model.Auction;
 import com.auction.model.AutoBidConfig;
 import com.auction.model.AutoBidFailureReason;
 import com.auction.model.AutoBidStatus;
@@ -60,13 +59,11 @@ import org.slf4j.LoggerFactory;
  * <p><b>Liên kết với các file khác:</b>
  *
  * <ul>
- *   <li>{@link BidStrategy} — interface mà class này implements
- *   <li>{@link ManualBidStrategy} — dùng logic validate tương tự cho từng auto-bid
  *   <li>{@link AutoBidConfigDao} — lấy danh sách auto-bid configs từ database
  *   <li>{@link com.auction.service.BidService} — gọi {@code executeAll()} sau mỗi manual bid
  * </ul>
  */
-public class AutoBidStrategy implements BidStrategy {
+public class AutoBidStrategy {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AutoBidStrategy.class);
 
@@ -107,36 +104,6 @@ public class AutoBidStrategy implements BidStrategy {
   public AutoBidStrategy(AutoBidConfigDao autoBidConfigDao, UserDao userDao) {
     this.autoBidConfigDao = autoBidConfigDao;
     this.userDao = userDao;
-  }
-
-  /**
-   * Thực thi một lần auto-bid đơn lẻ (implements BidStrategy).
-   *
-   * <p>Logic giống ManualBidStrategy nhưng bỏ qua kiểm tra "seller tự bid" vì auto-bid chỉ áp dụng
-   * cho bidder (đã validate khi setup auto-bid config).
-   *
-   * @param auction phiên đấu giá đang RUNNING
-   * @param bidderId ID người được auto-bid thay
-   * @param amount số tiền auto-bid (= currentPrice + increment)
-   * @param isAutoBid luôn {@code true} cho auto-bid
-   * @return BidTransaction mới với autoBid = true
-   */
-  @Override
-  public BidTransaction execute(
-      Auction auction, Long bidderId, BigDecimal amount, boolean isAutoBid) {
-    requirePositiveIntegerVnd(amount, "Auto-bid amount");
-
-    if (amount.compareTo(auction.getCurrentPrice()) <= 0) {
-      throw new InvalidBidException(
-          "Giá auto-bid phải cao hơn giá hiện tại: " + auction.getCurrentPrice());
-    }
-
-    auction.setCurrentPrice(amount);
-    auction.setLeadingBidderId(bidderId);
-
-    LOGGER.debug("Auto-bid: auction={}, bidder={}, amount={}", auction.getId(), bidderId, amount);
-
-    return new BidTransaction(auction.getId(), bidderId, amount, true);
   }
 
   /**
@@ -389,14 +356,6 @@ public class AutoBidStrategy implements BidStrategy {
 
     if (autoBidCount >= MAX_AUTO_BIDS_PER_TRIGGER) {
       LOGGER.warn("Đạt giới hạn {} auto-bid cho phiên #{}", MAX_AUTO_BIDS_PER_TRIGGER, auctionId);
-    }
-  }
-
-  private static void requirePositiveIntegerVnd(BigDecimal amount, String fieldName) {
-    try {
-      MoneyValidator.requirePositiveIntegerVnd(amount, fieldName);
-    } catch (IllegalArgumentException e) {
-      throw new InvalidBidException(e.getMessage());
     }
   }
 
