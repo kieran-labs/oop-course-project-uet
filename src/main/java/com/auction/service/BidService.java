@@ -16,6 +16,7 @@ import com.auction.model.BidTransaction;
 import com.auction.model.User;
 import com.auction.pattern.observer.AuctionEventManager;
 import com.auction.pattern.strategy.AutoBidStrategy;
+import com.auction.util.MoneyValidator;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -101,9 +102,7 @@ public class BidService {
     MDC.put("auctionId", String.valueOf(auctionId));
     MDC.put("userId", String.valueOf(bidderId));
     try {
-      if (amount == null || amount.signum() <= 0) {
-        throw new InvalidBidException("Giá bid phải lớn hơn 0");
-      }
+      requirePositiveIntegerVnd(amount, "Bid amount");
 
       List<Runnable> postCommitEvents = new ArrayList<>();
 
@@ -167,7 +166,7 @@ public class BidService {
                       previousLeaderId,
                       String.format(
                           "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VNĐ",
-                          auctionId, amount.longValue()));
+                          auctionId, toIntegerVnd(amount, "Bid amount")));
                 }
 
                 BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, isAutoBid);
@@ -245,12 +244,8 @@ public class BidService {
     MDC.put("auctionId", String.valueOf(auctionId));
     MDC.put("userId", String.valueOf(bidderId));
     try {
-      if (increment == null || increment.signum() <= 0) {
-        throw new InvalidBidException("increment phải lớn hơn 0");
-      }
-      if (maxBid == null || maxBid.signum() <= 0) {
-        throw new InvalidBidException("maxBid phải lớn hơn 0");
-      }
+      requirePositiveIntegerVnd(increment, "increment");
+      requirePositiveIntegerVnd(maxBid, "maxBid");
 
       List<Runnable> postCommitEvents = new ArrayList<>();
 
@@ -295,7 +290,7 @@ public class BidService {
                       String.format(
                           "Auto-bid cho phiên #%d không được kích hoạt:"
                               + " maxBid thấp hơn giá đặt ban đầu (%,d VNĐ)",
-                          auctionId, initialBid.longValue()));
+                          auctionId, toIntegerVnd(initialBid, "Initial bid")));
                   return config;
                 }
 
@@ -313,8 +308,8 @@ public class BidService {
                           "Auto-bid cho phiên #%d không được kích hoạt:"
                               + " số dư không đủ. Cần %,d VNĐ, có %,d VNĐ",
                           auctionId,
-                          initialBid.longValue(),
-                          bidder.getAvailableBalance().longValue()));
+                          toIntegerVnd(initialBid, "Initial bid"),
+                          toIntegerVnd(bidder.getAvailableBalance(), "Available balance")));
                   return config;
                 }
 
@@ -349,7 +344,7 @@ public class BidService {
                       previousLeaderId,
                       String.format(
                           "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VNĐ",
-                          auctionId, initialBid.longValue()));
+                          auctionId, toIntegerVnd(initialBid, "Initial bid")));
                 }
 
                 BidTransaction tx = new BidTransaction(auctionId, bidderId, initialBid, true);
@@ -430,7 +425,7 @@ public class BidService {
           previousLeaderId,
           String.format(
               "Bạn đã bị vượt giá tại phiên #%d. Giá hiện tại: %,d VNĐ",
-              auctionId, amount.longValue()));
+              auctionId, toIntegerVnd(amount, "Bid amount")));
     }
 
     BidTransaction tx = new BidTransaction(auctionId, bidderId, amount, true);
@@ -452,6 +447,22 @@ public class BidService {
       eventManager.notifyBidUpdate(auctionId, msg);
     } catch (Exception e) {
       LOGGER.error("Lỗi khi gửi thông báo BID_UPDATE cho phiên #{}: {}", auctionId, e.getMessage());
+    }
+  }
+
+  private static void requirePositiveIntegerVnd(BigDecimal amount, String fieldName) {
+    try {
+      MoneyValidator.requirePositiveIntegerVnd(amount, fieldName);
+    } catch (IllegalArgumentException e) {
+      throw new InvalidBidException(e.getMessage());
+    }
+  }
+
+  private static long toIntegerVnd(BigDecimal amount, String fieldName) {
+    try {
+      return MoneyValidator.toIntegerVndExact(amount, fieldName);
+    } catch (IllegalArgumentException | ArithmeticException e) {
+      throw new InvalidBidException(e.getMessage());
     }
   }
 }

@@ -15,6 +15,7 @@ import com.auction.model.Admin;
 import com.auction.model.DepositRecord;
 import com.auction.model.User;
 import com.auction.pattern.factory.UserFactory;
+import com.auction.util.MoneyValidator;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -226,9 +227,7 @@ public class UserService {
    * @throws NotFoundException nếu user không tồn tại
    */
   public DepositRecord requestDeposit(Long userId, BigDecimal amount) {
-    if (amount == null || amount.signum() <= 0) {
-      throw new IllegalArgumentException("Số tiền nạp phải lớn hơn 0.");
-    }
+    MoneyValidator.requirePositiveIntegerVnd(amount, "Deposit amount");
     // Kiểm tra user tồn tại trước khi tạo bản ghi deposit
     userDao
         .findById(userId)

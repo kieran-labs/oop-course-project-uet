@@ -17,6 +17,7 @@ import com.auction.model.Item;
 import com.auction.pattern.observer.AuctionEventManager;
 import com.auction.pattern.state.AuctionState;
 import com.auction.pattern.state.AuctionStates;
+import com.auction.util.MoneyValidator;
 import java.math.BigDecimal;
 import java.util.List;
 import org.jdbi.v3.core.Jdbi;
@@ -129,9 +130,7 @@ public class AuctionService {
     if (req.getItemId() == null) {
       throw new IllegalArgumentException("Item ID is required");
     }
-    if (req.getStartingPrice() == null || req.getStartingPrice().signum() <= 0) {
-      throw new IllegalArgumentException("Starting price must be greater than 0");
-    }
+    MoneyValidator.requirePositiveIntegerVnd(req.getStartingPrice(), "Starting price");
     if (req.getStartTime() == null || req.getEndTime() == null) {
       throw new IllegalArgumentException("Start time and end time are required");
     }
@@ -226,6 +225,8 @@ public class AuctionService {
    * State pattern trước khi sửa.
    */
   public Auction update(Long auctionId, BigDecimal newPrice, Long sellerId) {
+    MoneyValidator.requirePositiveIntegerVnd(newPrice, "Starting price");
+
     Auction auction =
         auctionDao
             .findById(auctionId)
@@ -270,7 +271,8 @@ public class AuctionService {
       throw new UnauthorizedException("You can only edit your own auctions");
     }
 
-    if (request.getStartingPrice() != null && request.getStartingPrice().signum() > 0) {
+    if (request.getStartingPrice() != null) {
+      MoneyValidator.requirePositiveIntegerVnd(request.getStartingPrice(), "Starting price");
       auction.setStartingPrice(request.getStartingPrice());
       auction.setCurrentPrice(request.getStartingPrice());
     }

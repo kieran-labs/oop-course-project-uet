@@ -155,6 +155,19 @@ class AuctionServiceTest {
     }
 
     @Test
+    @DisplayName("Decimal starting price is rejected")
+    void testCreateAuctionDecimalStartingPriceRejected() {
+      CreateAuctionRequest req = new CreateAuctionRequest();
+      req.setItemId(ITEM_ID);
+      req.setStartingPrice(new BigDecimal("1000000.50"));
+      req.setStartTime(LocalDateTime.now().plusHours(1));
+      req.setEndTime(LocalDateTime.now().plusHours(3));
+
+      assertThrows(IllegalArgumentException.class, () -> auctionService.create(req, SELLER_ID));
+      verify(auctionDao, never()).insert(any(Auction.class));
+    }
+
+    @Test
     @DisplayName("Item không tồn tại → NotFoundException")
     void testCreateAuctionItemNotFoundThrowsNotFoundException() {
       when(itemDao.findById(999L)).thenReturn(Optional.empty());

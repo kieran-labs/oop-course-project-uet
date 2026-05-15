@@ -368,6 +368,17 @@ class BidServiceTest {
     }
 
     @Test
+    @DisplayName("Decimal manual bid is rejected before DB access")
+    void testBidDecimalAmountThrowsInvalidBidException() {
+      assertThrows(
+          InvalidBidException.class,
+          () -> bidService.placeBid(AUCTION_ID, BIDDER_ID, new BigDecimal("2000000.50"), false),
+          "VND bid amount must be a whole number");
+
+      verify(auctionDao, never()).findByIdForUpdate(any(), any());
+    }
+
+    @Test
     @DisplayName("Bid giá null → NullPointerException hoặc InvalidBidException")
     void testBidNullAmountThrowsException() {
       assertThrows(
@@ -898,6 +909,31 @@ class BidServiceTest {
       assertThrows(
           InvalidBidException.class,
           () -> bidService.createAutoBid(AUCTION_ID, BIDDER_ID, MAX_BID, BigDecimal.ZERO));
+
+      verify(auctionDao, never()).findByIdForUpdate(any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Decimal maxBid is rejected before DB access")
+    void createAutoBid_decimalMaxBid_rejected() {
+      assertThrows(
+          InvalidBidException.class,
+          () ->
+              bidService.createAutoBid(AUCTION_ID, BIDDER_ID, new BigDecimal("5000000.50"), STEP));
+
+      verify(auctionDao, never()).findByIdForUpdate(any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Decimal increment is rejected before DB access")
+    void createAutoBid_decimalIncrement_rejected() {
+      assertThrows(
+          InvalidBidException.class,
+          () ->
+              bidService.createAutoBid(
+                  AUCTION_ID, BIDDER_ID, MAX_BID, new BigDecimal("500000.50")));
 
       verify(auctionDao, never()).findByIdForUpdate(any(), any());
     }
