@@ -692,10 +692,10 @@
     -fx-border-width: 1.2;
     -fx-background-radius: 8;
     -fx-border-radius: 8;
-    -fx-padding: 0 18 0 14;
+    -fx-padding: 0 14 0 10;
     -fx-pref-height: 34;
     -fx-min-height: 34;
-    -fx-graphic-text-gap: 9;
+    -fx-graphic-text-gap: 7;
     -fx-cursor: hand;
 }
 

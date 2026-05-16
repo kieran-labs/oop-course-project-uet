@@ -86,7 +86,8 @@ public class AuctionListController implements Navigable {
       new ObjectMapper().registerModule(new JavaTimeModule());
   private static final NumberFormat VND_AMOUNT =
       NumberFormat.getNumberInstance(Locale.of("vi", "VN"));
-  private static final Pattern AUCTION_ID_PATTERN = Pattern.compile("#(\\d+)");
+  private static final Pattern AUCTION_ID_PATTERN =
+      Pattern.compile("#(\\d+)(?:\\s*(?:VND|VNĐ|₫|đ))?", Pattern.CASE_INSENSITIVE);
   private static final Pattern VND_AMOUNT_PATTERN =
       Pattern.compile("([+-]?\\s*[\\d.,]+\\s*(?:VND|VNĐ|₫|đ))", Pattern.CASE_INSENSITIVE);
   private static final Pattern NEW_BALANCE_PATTERN =
@@ -384,10 +385,12 @@ public class AuctionListController implements Navigable {
   //  USER_COLOR  → light sky-blue, clearly reads as "blue"
   //  AUCTION_COLOR → warm tan/brown, clearly reads as "nâu"
   //  PRICE_COLOR → existing yellow highlight for amounts
+  //  ADMIN_COLOR → silver-gray role marker for "Admin"
   //  DEFAULT_COLOR → near-white body text
   private static final String USER_COLOR = "#60A5FA";
   private static final String AUCTION_COLOR = "#E0A458";
   private static final String PRICE_COLOR = "#ffd600";
+  private static final String ADMIN_COLOR = "#CBD5E1";
   private static final String DEFAULT_COLOR = "#e0e0e0";
 
   private Node buildNotificationRow(String notification) {
@@ -405,6 +408,7 @@ public class AuctionListController implements Navigable {
    * <ul>
    *   <li>{@code «name»} → blue (username)
    *   <li>{@code [item]} → brown (auction display name)
+   *   <li>{@code Admin} → silver-gray
    *   <li>price amounts → yellow bold
    *   <li>remainder → default near-white
    * </ul>
@@ -517,11 +521,28 @@ public class AuctionListController implements Navigable {
           i = end + 1;
           continue;
         }
+      } else if (startsWithAdminToken(text, i)) {
+        flushDefault(flow, buf, defaultColor);
+        flow.getChildren().add(createNotificationText("Admin", ADMIN_COLOR, true));
+        i += "Admin".length();
+        continue;
       }
       buf.append(c);
       i++;
     }
     flushDefault(flow, buf, defaultColor);
+  }
+
+  private boolean startsWithAdminToken(String text, int index) {
+    if (!text.startsWith("Admin", index)) {
+      return false;
+    }
+    int before = index - 1;
+    int after = index + "Admin".length();
+    boolean leftBoundary = before < 0 || !Character.isLetterOrDigit(text.charAt(before));
+    boolean rightBoundary =
+        after >= text.length() || !Character.isLetterOrDigit(text.charAt(after));
+    return leftBoundary && rightBoundary;
   }
 
   /**
@@ -589,8 +610,9 @@ public class AuctionListController implements Navigable {
    * "Phiên đấu giá #5 đã bị hủy", "Bạn đã bị vượt giá tại phiên #5") is preserved verbatim so we
    * don't end up with awkward double phrasing like "Phiên đấu giá tại phiên [...]".
    *
-   * <p>If the name cannot be resolved (auction not loaded), the raw "#5" stays and renders in
-   * default colour — better than a stub "[#5]" placeholder.
+   * <p>If the name cannot be resolved (auction not loaded), the fallback still renders as {@code
+   * [#5]} in brown. This prevents legacy strings like {@code #5 VND} from being highlighted as
+   * money.
    */
   private String replaceAuctionIdWithName(String notification) {
     Matcher matcher = AUCTION_ID_PATTERN.matcher(notification);
@@ -603,7 +625,7 @@ public class AuctionListController implements Navigable {
       if (displayName != null) {
         out.append('[').append(displayName).append(']');
       } else {
-        out.append('#').append(auctionId);
+        out.append("[#").append(auctionId).append(']');
       }
       last = matcher.end();
     }

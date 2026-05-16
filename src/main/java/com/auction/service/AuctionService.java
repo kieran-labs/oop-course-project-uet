@@ -20,6 +20,7 @@ import com.auction.pattern.observer.AuctionEventManager;
 import com.auction.pattern.state.AuctionState;
 import com.auction.pattern.state.AuctionStates;
 import com.auction.util.MoneyValidator;
+import com.auction.util.NotificationFormat;
 import java.math.BigDecimal;
 import java.util.List;
 import org.jdbi.v3.core.Jdbi;
@@ -423,7 +424,7 @@ public class AuctionService {
     }
 
     java.util.List<Long> recipients = new java.util.ArrayList<>();
-    String message = "Phiên đấu giá #" + auctionId + " đã bị Admin xóa";
+    String message = "Phiên đấu giá " + formatAuctionDisplayName(auction) + " đã bị Admin xóa";
 
     if (jdbi != null) {
       jdbi.useTransaction(
@@ -568,7 +569,8 @@ public class AuctionService {
       return null;
     }
     String byWho = "ADMIN".equals(actorRole) ? "Admin" : "người bán";
-    String message = "Phiên đấu giá #" + auction.getId() + " đã bị hủy bởi " + byWho;
+    String message =
+        "Phiên đấu giá " + formatAuctionDisplayName(auction) + " đã bị hủy bởi " + byWho;
 
     // Tập hợp tất cả người nhận: leadingBidder + tất cả bidder đã từng đặt giá + seller
     java.util.Set<Long> recipients = new java.util.LinkedHashSet<>();
@@ -603,6 +605,31 @@ public class AuctionService {
 
     recipientsOut.addAll(recipients);
     return message;
+  }
+
+  /**
+   * Resolve the canonical UI display token for an auction name in notifications.
+   *
+   * <p>Contract:
+   *
+   * <ul>
+   *   <li>Real item names render as {@code [itemName]}.
+   *   <li>Unknown names fall back to {@code [#id]}.
+   *   <li>The auction ID is never formatted as money and never receives {@code VND}.
+   * </ul>
+   */
+  private String formatAuctionDisplayName(Auction auction) {
+    String itemName = null;
+    try {
+      if (auction != null && auction.getItemId() != null) {
+        itemName = itemDao.findById(auction.getItemId()).map(Item::getName).orElse(null);
+      }
+    } catch (Exception e) {
+      Long auctionId = auction != null ? auction.getId() : null;
+      LOGGER.warn("Không thể resolve tên sản phẩm cho phiên #{}", auctionId, e);
+    }
+    Long auctionId = auction != null ? auction.getId() : null;
+    return NotificationFormat.auctionName(auctionId, itemName);
   }
 
   /**

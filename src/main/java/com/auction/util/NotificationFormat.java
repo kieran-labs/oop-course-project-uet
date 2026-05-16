@@ -30,14 +30,15 @@ public final class NotificationFormat {
   }
 
   /**
-   * Wrap an auction's display name (item name) so the client renders it as a brown chip. Falls back
-   * to {@code #id} when the name is unknown so the client can still resolve it from the loaded
-   * auction list.
+   * Wrap an auction's display name (item name) so the client renders it as a brown chip.
+   *
+   * <p>Important UI contract: auction/session names are always displayed in square brackets. If the
+   * real item name is unknown, the fallback ID is still wrapped, e.g. {@code [#4]}. Never return a
+   * bare {@code #4}, otherwise the notification renderer may mistake {@code #4 VND} for a money
+   * amount.
    */
   public static String auctionName(Long auctionId, String itemName) {
-    if (itemName == null || itemName.isBlank()) {
-      return "#" + auctionId;
-    }
-    return "[" + itemName + "]";
+    String safe = itemName != null && !itemName.isBlank() ? itemName.trim() : "#" + auctionId;
+    return "[" + safe + "]";
   }
 }
