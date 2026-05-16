@@ -329,6 +329,22 @@
     -fx-text-fill: #D97706;
 }
 
+/* Auction-list item summary accents — use these classes inside the custom item cell.
+   Keep description/status unchanged; only make product name and starting price stand out. */
+.auction-list-product-name {
+    -fx-text-fill: #8B5E34;
+    -fx-font-weight: bold;
+}
+
+.auction-list-starting-price {
+    -fx-text-fill: #B45309;
+    -fx-font-weight: bold;
+}
+
+.auction-list-meta-label {
+    -fx-text-fill: #64748B;
+}
+
 .countdown-label {
     -fx-font-size: 18px;
     -fx-font-weight: bold;
@@ -569,6 +585,21 @@
 .table-action-delete:pressed {
     -fx-background-color: linear-gradient(to bottom, #B91C1C 0%, #991B1B 100%);
     -fx-effect: none;
+}
+
+/* Subtle action-chip micro-interaction — intentionally tiny so table layout stays stable. */
+.table-action-view:hover,
+.table-action-cancel:hover,
+.table-action-delete:hover {
+    -fx-scale-x: 1.015;
+    -fx-scale-y: 1.015;
+}
+
+.table-action-view:pressed,
+.table-action-cancel:pressed,
+.table-action-delete:pressed {
+    -fx-scale-x: 0.985;
+    -fx-scale-y: 0.985;
 }
 
 /* Solid green — admin "Duyệt" actions inside tables. Compact chip with
@@ -1173,7 +1204,8 @@
 }
 
 .auction-table .table-row-cell:hover {
-    -fx-background-color: #EFF6FF;
+    -fx-background-color: #F8FBFF;
+    -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.10), 6, 0, 0, 1);
 }
 
 .auction-table .table-row-cell:selected {
