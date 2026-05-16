@@ -239,10 +239,18 @@ public class AdminPanelController implements Navigable {
                 Platform.runLater(
                     () -> {
                       if (response.statusCode() == 204 || response.statusCode() == 200) {
-                        setStatus("Đã xóa vĩnh viễn phiên #" + id);
+                        setStatus("Đã xóa vĩnh viễn phiên #" + id + ".");
+                        // Remove from UI immediately so admin sees the row vanish even before
+                        // loadAuctions() round-trips.
+                        allAuctions.removeIf(a -> id.equals(a.getId()));
+                        auctionTable.setItems(FXCollections.observableArrayList(allAuctions));
                         loadAuctions();
                       } else {
-                        setStatus("Xóa thất bại: " + response.statusCode());
+                        setStatus(
+                            "Xóa thất bại ("
+                                + response.statusCode()
+                                + "): "
+                                + extractServerMessage(response.body()));
                       }
                     });
               } catch (Exception e) {
@@ -265,10 +273,14 @@ public class AdminPanelController implements Navigable {
                 Platform.runLater(
                     () -> {
                       if (response.statusCode() == 204 || response.statusCode() == 200) {
-                        setStatus("Đã hủy phiên #" + id);
+                        setStatus("Đã hủy phiên #" + id + ".");
                         loadAuctions();
                       } else {
-                        setStatus("Hủy phiên thất bại: " + response.statusCode());
+                        setStatus(
+                            "Hủy phiên thất bại ("
+                                + response.statusCode()
+                                + "): "
+                                + extractServerMessage(response.body()));
                       }
                     });
               } catch (Exception e) {
@@ -276,6 +288,26 @@ public class AdminPanelController implements Navigable {
                 Platform.runLater(() -> setStatus("Không thể kết nối đến server."));
               }
             });
+  }
+
+  /**
+   * Pull the human-readable message out of an error JSON body. Returns a reasonable fallback if the
+   * body isn't JSON or doesn't have a "message" field — keeps the status bar useful even when the
+   * server emits a non-standard error payload.
+   */
+  private String extractServerMessage(String body) {
+    if (body == null || body.isBlank()) {
+      return "Không có thông tin lỗi từ server.";
+    }
+    try {
+      JsonNode node = MAPPER.readTree(body);
+      if (node.hasNonNull("message")) {
+        return node.get("message").asText();
+      }
+    } catch (Exception ignored) {
+      // body wasn't JSON — fall through and return it raw (truncated).
+    }
+    return body.length() > 200 ? body.substring(0, 200) + "…" : body;
   }
 
   /**
@@ -304,7 +336,7 @@ public class AdminPanelController implements Navigable {
 
   /**
    * Xóa tài khoản người dùng qua {@code DELETE /api/admin/users/{id}}. Tải lại bảng user sau khi
-   * thành công.
+   * thành công. Hiển thị lỗi rõ ràng nếu server từ chối (ví dụ: user có lịch sử đấu giá).
    */
   private void deleteUser(Long id) {
     Thread.ofVirtual()
@@ -315,10 +347,11 @@ public class AdminPanelController implements Navigable {
                 Platform.runLater(
                     () -> {
                       if (response.statusCode() == 204 || response.statusCode() == 200) {
-                        setStatus("Đã xóa user #" + id);
+                        setStatus("Đã xóa tài khoản #" + id + " thành công.");
                         loadUsers();
                       } else {
-                        setStatus("Xóa user thất bại: " + response.statusCode());
+                        String serverMsg = extractServerMessage(response.body());
+                        setStatus("Không thể xóa tài khoản #" + id + ": " + serverMsg);
                       }
                     });
               } catch (Exception e) {
@@ -488,22 +521,288 @@ public class AdminPanelController implements Navigable {
                 cancelBtn.setOnAction(
                     e -> {
                       AuctionResponse a = getTableView().getItems().get(getIndex());
-                      deleteAuction(a.getId());
+                      confirmCancelAuction(a);
                     });
                 deleteBtn.setOnAction(
                     e -> {
                       AuctionResponse a = getTableView().getItems().get(getIndex());
-                      hardDeleteAuction(a.getId());
+                      confirmHardDeleteAuction(a);
                     });
               }
 
               @Override
               protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                setGraphic(empty ? null : box);
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
+                  setGraphic(null);
+                  return;
+                }
+                AuctionResponse a = getTableRow().getItem();
+                // "Hủy" chỉ áp dụng cho phiên CHƯA kết thúc — OPEN / RUNNING. Phiên đã
+                // FINISHED / PAID / CANCELED chỉ còn lựa chọn xóa cứng.
+                String status = a.getStatus();
+                boolean canCancel = "OPEN".equals(status) || "RUNNING".equals(status);
+                cancelBtn.setDisable(!canCancel);
+                cancelBtn.setOpacity(canCancel ? 1.0 : 0.45);
+                setGraphic(box);
                 setAlignment(javafx.geometry.Pos.CENTER);
               }
             });
+  }
+
+  /**
+   * Hiện custom dialog xác nhận trước khi hủy phiên — có animation fade+scale, font Lexend, màu
+   * đồng bộ với design system của app.
+   */
+  private void confirmCancelAuction(AuctionResponse a) {
+    String name = a.getItemName() != null ? a.getItemName() : "#" + a.getId();
+    showConfirmDialog(
+        "Xác nhận hủy phiên",
+        "Hủy phiên đấu giá #" + a.getId() + "?",
+        "Phiên \""
+            + name
+            + "\" sẽ chuyển sang trạng thái CANCELED.\n"
+            + "Seller và tất cả bidder đã tham gia sẽ nhận thông báo.\n"
+            + "Người dẫn đầu (nếu có) sẽ được hoàn lại tiền giữ chỗ.\n"
+            + "Thao tác này không thể hoàn tác.",
+        false,
+        () -> deleteAuction(a.getId()));
+  }
+
+  /** Hiện custom dialog xác nhận trước khi xóa cứng phiên — destructive action. */
+  private void confirmHardDeleteAuction(AuctionResponse a) {
+    String name = a.getItemName() != null ? a.getItemName() : "#" + a.getId();
+    showConfirmDialog(
+        "Xác nhận xóa vĩnh viễn",
+        "Xóa phiên đấu giá #" + a.getId() + "?",
+        "Phiên \""
+            + name
+            + "\" cùng toàn bộ lịch sử bid,\n"
+            + "auto-bid và giao dịch ví liên quan sẽ bị xóa\n"
+            + "khỏi cơ sở dữ liệu. Thao tác này KHÔNG THỂ hoàn tác.",
+        true,
+        () -> hardDeleteAuction(a.getId()));
+  }
+
+  /** Hiện custom dialog xác nhận trước khi xóa tài khoản người dùng. */
+  private void confirmDeleteUser(UserResponse u) {
+    showConfirmDialog(
+        "Xác nhận xóa tài khoản",
+        "Xóa tài khoản \"" + u.getUsername() + "\"?",
+        "Tài khoản #"
+            + u.getId()
+            + " sẽ bị xóa vĩnh viễn.\n"
+            + "Lưu ý: không thể xóa nếu tài khoản đã có\n"
+            + "lịch sử đấu giá, bid hoặc giao dịch liên quan.",
+        true,
+        () -> deleteUser(u.getId()));
+  }
+
+  /**
+   * Hiển thị custom confirm dialog có animation fade+scale, font Lexend, màu đồng bộ app.
+   *
+   * @param title tiêu đề cửa sổ dialog
+   * @param header dòng header lớn bên trong dialog
+   * @param body nội dung mô tả chi tiết
+   * @param danger true → nút xác nhận màu đỏ (destructive); false → màu cam (warning)
+   * @param onConfirm callback thực thi khi người dùng bấm xác nhận
+   */
+  private void showConfirmDialog(
+      String title, String header, String body, boolean danger, Runnable onConfirm) {
+    javafx.stage.Stage dialog = new javafx.stage.Stage();
+    dialog.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+    dialog.initStyle(javafx.stage.StageStyle.TRANSPARENT);
+    dialog.setTitle(title);
+
+    // ── Root overlay (semi-transparent dark backdrop) ──────────────────────
+    javafx.scene.layout.StackPane overlay = new javafx.scene.layout.StackPane();
+    overlay.setStyle("-fx-background-color: rgba(0,0,0,0.45);");
+
+    // ── Card ───────────────────────────────────────────────────────────────
+    javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(0);
+    card.setMaxWidth(420);
+    card.setStyle(
+        "-fx-background-color: #FFFFFF;"
+            + "-fx-background-radius: 16;"
+            + "-fx-border-color: #E8F0FE;"
+            + "-fx-border-width: 1;"
+            + "-fx-border-radius: 16;"
+            + "-fx-effect: dropshadow(gaussian, rgba(13,71,161,0.22), 32, 0.05, 0, 8);");
+
+    // ── Header strip ───────────────────────────────────────────────────────
+    String stripColor = danger ? "#DC2626" : "#D97706";
+    javafx.scene.layout.VBox headerStrip = new javafx.scene.layout.VBox(4);
+    headerStrip.setPadding(new javafx.geometry.Insets(20, 24, 16, 24));
+    headerStrip.setStyle(
+        "-fx-background-color: "
+            + (danger ? "#FEF2F2" : "#FFFBEB")
+            + ";"
+            + "-fx-background-radius: 15 15 0 0;");
+
+    javafx.scene.control.Label headerLabel = new javafx.scene.control.Label(header);
+    headerLabel.setWrapText(true);
+    headerLabel.setStyle(
+        "-fx-font-family: 'LexendSemiBold';"
+            + "-fx-font-size: 16px;"
+            + "-fx-text-fill: "
+            + stripColor
+            + ";"
+            + "-fx-font-smoothing-type: gray;");
+
+    headerStrip.getChildren().add(headerLabel);
+
+    // ── Body ───────────────────────────────────────────────────────────────
+    javafx.scene.layout.VBox bodyBox = new javafx.scene.layout.VBox(0);
+    bodyBox.setPadding(new javafx.geometry.Insets(16, 24, 20, 24));
+
+    javafx.scene.control.Label bodyLabel = new javafx.scene.control.Label(body);
+    bodyLabel.setWrapText(true);
+    bodyLabel.setStyle(
+        "-fx-font-family: 'Lexend';"
+            + "-fx-font-size: 13px;"
+            + "-fx-text-fill: #475569;"
+            + "-fx-line-spacing: 2;"
+            + "-fx-font-smoothing-type: gray;");
+    bodyBox.getChildren().add(bodyLabel);
+
+    // ── Divider ────────────────────────────────────────────────────────────
+    javafx.scene.control.Separator divider = new javafx.scene.control.Separator();
+    divider.setStyle("-fx-background-color: #E8F0FE;");
+
+    // ── Button row ─────────────────────────────────────────────────────────
+    javafx.scene.layout.HBox btnRow = new javafx.scene.layout.HBox(10);
+    btnRow.setPadding(new javafx.geometry.Insets(14, 24, 18, 24));
+    btnRow.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+
+    javafx.scene.control.Button cancelBtn = new javafx.scene.control.Button("Hủy bỏ");
+    cancelBtn.setStyle(
+        "-fx-font-family: 'Lexend';"
+            + "-fx-font-size: 13px;"
+            + "-fx-font-weight: bold;"
+            + "-fx-text-fill: #64748B;"
+            + "-fx-background-color: #F1F5F9;"
+            + "-fx-border-color: #E2E8F0;"
+            + "-fx-border-width: 1.2;"
+            + "-fx-background-radius: 8;"
+            + "-fx-border-radius: 8;"
+            + "-fx-padding: 0 20 0 20;"
+            + "-fx-pref-height: 36;"
+            + "-fx-cursor: hand;"
+            + "-fx-font-smoothing-type: gray;");
+    cancelBtn.setOnMouseEntered(
+        e -> cancelBtn.setStyle(cancelBtn.getStyle().replace("#F1F5F9", "#E2E8F0")));
+    cancelBtn.setOnMouseExited(
+        e -> cancelBtn.setStyle(cancelBtn.getStyle().replace("#E2E8F0;", "#F1F5F9;")));
+
+    String confirmBg =
+        danger
+            ? "linear-gradient(to bottom, #EF4444 0%, #DC2626 100%)"
+            : "linear-gradient(to bottom, #F59E0B 0%, #D97706 100%)";
+    String confirmBgHover =
+        danger
+            ? "linear-gradient(to bottom, #DC2626 0%, #B91C1C 100%)"
+            : "linear-gradient(to bottom, #D97706 0%, #B45309 100%)";
+    String confirmLabel = danger ? "Xóa vĩnh viễn" : "Xác nhận hủy";
+
+    javafx.scene.control.Button confirmBtn = new javafx.scene.control.Button(confirmLabel);
+    confirmBtn.setStyle(
+        "-fx-font-family: 'LexendSemiBold';"
+            + "-fx-font-size: 13px;"
+            + "-fx-text-fill: #FFFFFF;"
+            + "-fx-background-color: "
+            + confirmBg
+            + ";"
+            + "-fx-border-color: transparent;"
+            + "-fx-background-radius: 8;"
+            + "-fx-border-radius: 8;"
+            + "-fx-padding: 0 20 0 20;"
+            + "-fx-pref-height: 36;"
+            + "-fx-cursor: hand;"
+            + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 6, 0, 0, 2);"
+            + "-fx-font-smoothing-type: gray;");
+    confirmBtn.setOnMouseEntered(
+        e -> confirmBtn.setStyle(confirmBtn.getStyle().replace(confirmBg, confirmBgHover)));
+    confirmBtn.setOnMouseExited(
+        e -> confirmBtn.setStyle(confirmBtn.getStyle().replace(confirmBgHover, confirmBg)));
+
+    cancelBtn.setOnAction(e -> closeDialogWithAnimation(dialog, overlay));
+    confirmBtn.setOnAction(
+        e -> {
+          closeDialogWithAnimation(dialog, overlay);
+          onConfirm.run();
+        });
+
+    btnRow.getChildren().addAll(cancelBtn, confirmBtn);
+    card.getChildren().addAll(headerStrip, bodyBox, divider, btnRow);
+    overlay.getChildren().add(card);
+
+    // ── Scene & stage ──────────────────────────────────────────────────────
+    javafx.scene.Scene scene =
+        new javafx.scene.Scene(overlay, javafx.scene.paint.Color.TRANSPARENT);
+    // Inherit the app stylesheet so Lexend fonts resolve correctly
+    try {
+      java.net.URL cssUrl = getClass().getResource("/css/style.css");
+      if (cssUrl != null) {
+        scene.getStylesheets().add(cssUrl.toExternalForm());
+      }
+    } catch (Exception ignored) {
+    }
+    dialog.setScene(scene);
+
+    // Size dialog to content + padding
+    dialog.setWidth(480);
+    dialog.setHeight(280);
+
+    // Center over owner window
+    javafx.stage.Stage owner = (javafx.stage.Stage) auctionTable.getScene().getWindow();
+    dialog.initOwner(owner);
+    dialog.setX(owner.getX() + (owner.getWidth() - dialog.getWidth()) / 2);
+    dialog.setY(owner.getY() + (owner.getHeight() - dialog.getHeight()) / 2);
+
+    // ── Entrance animation: fade-in + scale-up ─────────────────────────────
+    overlay.setOpacity(0);
+    card.setScaleX(0.88);
+    card.setScaleY(0.88);
+
+    javafx.animation.FadeTransition fadeIn =
+        new javafx.animation.FadeTransition(javafx.util.Duration.millis(180), overlay);
+    fadeIn.setFromValue(0);
+    fadeIn.setToValue(1);
+
+    javafx.animation.ScaleTransition scaleIn =
+        new javafx.animation.ScaleTransition(javafx.util.Duration.millis(200), card);
+    scaleIn.setFromX(0.88);
+    scaleIn.setFromY(0.88);
+    scaleIn.setToX(1.0);
+    scaleIn.setToY(1.0);
+    scaleIn.setInterpolator(javafx.animation.Interpolator.SPLINE(0.34, 1.56, 0.64, 1));
+
+    javafx.animation.ParallelTransition openAnim =
+        new javafx.animation.ParallelTransition(fadeIn, scaleIn);
+
+    dialog.show();
+    openAnim.play();
+  }
+
+  /** Animation thoát dialog: fade-out + scale-down, rồi đóng Stage. */
+  private void closeDialogWithAnimation(
+      javafx.stage.Stage dialog, javafx.scene.layout.StackPane overlay) {
+    javafx.scene.Node card = overlay.getChildren().get(0);
+
+    javafx.animation.FadeTransition fadeOut =
+        new javafx.animation.FadeTransition(javafx.util.Duration.millis(140), overlay);
+    fadeOut.setFromValue(1);
+    fadeOut.setToValue(0);
+
+    javafx.animation.ScaleTransition scaleOut =
+        new javafx.animation.ScaleTransition(javafx.util.Duration.millis(140), card);
+    scaleOut.setToX(0.92);
+    scaleOut.setToY(0.92);
+
+    javafx.animation.ParallelTransition closeAnim =
+        new javafx.animation.ParallelTransition(fadeOut, scaleOut);
+    closeAnim.setOnFinished(e -> dialog.close());
+    closeAnim.play();
   }
 
   /**
@@ -537,7 +836,7 @@ public class AdminPanelController implements Navigable {
                 deleteBtn.setOnAction(
                     e -> {
                       UserResponse u = getTableView().getItems().get(getIndex());
-                      deleteUser(u.getId());
+                      confirmDeleteUser(u);
                     });
               }
 

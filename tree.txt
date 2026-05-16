@@ -1,0 +1,247 @@
+.
+├── assets
+│   ├── app-screenshot.png
+│   ├── grading-rubric.png
+│   └── screenshots
+│       ├── admin.png
+│       ├── auction-detail.png
+│       ├── auction-list.png
+│       └── login.png
+├── AUDIT_REPORT.md
+├── build.gradle.kts
+├── config
+│   └── checkstyle
+│       └── checkstyle.xml
+├── db-reset.bat
+├── docs
+│   ├── BUSINESS_RULES.md
+│   ├── SCHEMA.md
+│   └── SETUP.md
+├── gradle
+│   └── wrapper
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
+├── gradlew
+├── gradlew.bat
+├── README.md
+├── SECURITY.md
+├── server-start.bat
+├── server-status.bat
+├── server-stop.bat
+├── settings.gradle.kts
+├── src
+│   ├── main
+│   │   ├── java
+│   │   │   └── com
+│   │   │       └── auction
+│   │   │           ├── App.java
+│   │   │           ├── ClientApp.java
+│   │   │           ├── config
+│   │   │           │   ├── DatabaseConfig.java
+│   │   │           │   └── JwtUtil.java
+│   │   │           ├── controller
+│   │   │           │   ├── AuctionController.java
+│   │   │           │   ├── AuctionWebSocketHandler.java
+│   │   │           │   ├── AuthController.java
+│   │   │           │   ├── BidController.java
+│   │   │           │   ├── ItemController.java
+│   │   │           │   └── NotificationController.java
+│   │   │           ├── dao
+│   │   │           │   ├── AuctionDao.java
+│   │   │           │   ├── AutoBidConfigDao.java
+│   │   │           │   ├── BidTransactionDao.java
+│   │   │           │   ├── DepositRequestDao.java
+│   │   │           │   ├── ItemDao.java
+│   │   │           │   ├── NotificationDao.java
+│   │   │           │   ├── PasswordResetRequestDao.java
+│   │   │           │   ├── UserDao.java
+│   │   │           │   └── WalletTransactionDao.java
+│   │   │           ├── dto
+│   │   │           │   ├── AuctionResponse.java
+│   │   │           │   ├── AutoBidRequest.java
+│   │   │           │   ├── BidRequest.java
+│   │   │           │   ├── BidUpdateMessage.java
+│   │   │           │   ├── ChangePasswordRequest.java
+│   │   │           │   ├── CreateAuctionRequest.java
+│   │   │           │   ├── CreateItemRequest.java
+│   │   │           │   ├── DepositRequest.java
+│   │   │           │   ├── ErrorResponse.java
+│   │   │           │   ├── ForgotPasswordRequest.java
+│   │   │           │   ├── LoginRequest.java
+│   │   │           │   ├── PageRequest.java
+│   │   │           │   ├── RegisterRequest.java
+│   │   │           │   └── UserResponse.java
+│   │   │           ├── exception
+│   │   │           │   ├── AuctionClosedException.java
+│   │   │           │   ├── AuctionException.java
+│   │   │           │   ├── DuplicateException.java
+│   │   │           │   ├── InvalidBidException.java
+│   │   │           │   ├── NotFoundException.java
+│   │   │           │   ├── package-info.java
+│   │   │           │   └── UnauthorizedException.java
+│   │   │           ├── Launcher.java
+│   │   │           ├── middleware
+│   │   │           │   └── JwtMiddleware.java
+│   │   │           ├── model
+│   │   │           │   ├── Admin.java
+│   │   │           │   ├── Auction.java
+│   │   │           │   ├── AuctionStatus.java
+│   │   │           │   ├── AutoBidConfig.java
+│   │   │           │   ├── AutoBidFailureReason.java
+│   │   │           │   ├── AutoBidStatus.java
+│   │   │           │   ├── Bidder.java
+│   │   │           │   ├── BidTransaction.java
+│   │   │           │   ├── DepositRecord.java
+│   │   │           │   ├── Entity.java
+│   │   │           │   ├── Item.java
+│   │   │           │   ├── PasswordResetRecord.java
+│   │   │           │   ├── Seller.java
+│   │   │           │   └── User.java
+│   │   │           ├── pattern
+│   │   │           │   ├── factory
+│   │   │           │   │   ├── AuctionStateFactory.java
+│   │   │           │   │   └── UserFactory.java
+│   │   │           │   ├── observer
+│   │   │           │   │   ├── AuctionEventListener.java
+│   │   │           │   │   ├── AuctionEventManager.java
+│   │   │           │   │   └── WebSocketObserver.java
+│   │   │           │   ├── state
+│   │   │           │   │   ├── AuctionState.java
+│   │   │           │   │   ├── AuctionStates.java
+│   │   │           │   │   ├── CanceledState.java
+│   │   │           │   │   ├── FinishedState.java
+│   │   │           │   │   ├── OpenState.java
+│   │   │           │   │   ├── PaidState.java
+│   │   │           │   │   ├── RunningState.java
+│   │   │           │   │   └── SettlingState.java
+│   │   │           │   └── strategy
+│   │   │           │       └── AutoBidStrategy.java
+│   │   │           ├── service
+│   │   │           │   ├── AuctionScheduler.java
+│   │   │           │   ├── AuctionService.java
+│   │   │           │   ├── BidService.java
+│   │   │           │   ├── ItemService.java
+│   │   │           │   ├── NotificationService.java
+│   │   │           │   ├── PasswordResetService.java
+│   │   │           │   └── UserService.java
+│   │   │           ├── ui
+│   │   │           │   ├── controller
+│   │   │           │   │   ├── AdminPanelController.java
+│   │   │           │   │   ├── AuctionDetailController.java
+│   │   │           │   │   ├── AuctionListController.java
+│   │   │           │   │   ├── ChangePasswordController.java
+│   │   │           │   │   ├── CreateAuctionController.java
+│   │   │           │   │   ├── CreateItemController.java
+│   │   │           │   │   ├── DepositController.java
+│   │   │           │   │   ├── ForgotPasswordController.java
+│   │   │           │   │   ├── LoginController.java
+│   │   │           │   │   ├── ProfileController.java
+│   │   │           │   │   ├── RegisterController.java
+│   │   │           │   │   └── WelcomeController.java
+│   │   │           │   └── util
+│   │   │           │       ├── Navigable.java
+│   │   │           │       └── SceneManager.java
+│   │   │           └── util
+│   │   │               ├── BackgroundBidWatcher.java
+│   │   │               ├── MoneyValidator.java
+│   │   │               ├── NotificationFormat.java
+│   │   │               ├── NotificationItem.java
+│   │   │               ├── NotificationStore.java
+│   │   │               ├── RestClient.java
+│   │   │               ├── UserBalanceWatcher.java
+│   │   │               └── WebSocketClient.java
+│   │   └── resources
+│   │       ├── css
+│   │       │   └── style.css
+│   │       ├── db
+│   │       │   └── migration
+│   │       │       ├── V1__initial_schema.sql
+│   │       │       ├── V2__seed_admin.sql
+│   │       │       ├── V3__add_balance.sql
+│   │       │       ├── V4__deposit_requests.sql
+│   │       │       ├── V5__password_reset_requests.sql
+│   │       │       ├── V6__notifications.sql
+│   │       │       ├── V7__add_increment_amount.sql
+│   │       │       ├── V8__add_seller_id_to_auctions.sql
+│   │       │       ├── V9__add_settling_status.sql
+│   │       │       ├── V10__repair_auto_bid_config_columns.sql
+│   │       │       ├── V11__relax_legacy_auto_bid_increment.sql
+│   │       │       ├── V12__add_reserved_balance.sql
+│   │       │       ├── V13__unique_pending_password_reset.sql
+│   │       │       ├── V14__add_item_status.sql
+│   │       │       ├── V15__add_auto_bid_status.sql
+│   │       │       ├── V16__add_user_token_version.sql
+│   │       │       └── V17__wallet_transactions.sql
+│   │       ├── fonts
+│   │       │   ├── Lexend-Black.ttf
+│   │       │   ├── Lexend-Bold.ttf
+│   │       │   ├── Lexend-ExtraBold.ttf
+│   │       │   ├── Lexend-ExtraLight.ttf
+│   │       │   ├── Lexend-Light.ttf
+│   │       │   ├── Lexend-Medium.ttf
+│   │       │   ├── Lexend-Regular.ttf
+│   │       │   ├── Lexend-SemiBold.ttf
+│   │       │   └── Lexend-Thin.ttf
+│   │       ├── icons
+│   │       │   ├── auction.png
+│   │       │   ├── auctionpic.png
+│   │       │   ├── businessman.png
+│   │       │   ├── computer.png
+│   │       │   ├── seller.png
+│   │       │   └── settings.png
+│   │       ├── logback.xml
+│   │       └── ui
+│   │           └── fxml
+│   │               ├── admin-panel.fxml
+│   │               ├── auction-detail.fxml
+│   │               ├── auction-list.fxml
+│   │               ├── change-password.fxml
+│   │               ├── create-auction.fxml
+│   │               ├── create-item.fxml
+│   │               ├── deposit.fxml
+│   │               ├── forgot-password.fxml
+│   │               ├── login.fxml
+│   │               ├── profile.fxml
+│   │               ├── register.fxml
+│   │               └── welcome.fxml
+│   └── test
+│       └── java
+│           └── com
+│               └── auction
+│                   ├── config
+│                   │   ├── DatabaseConfigTest.java
+│                   │   └── JwtUtilTest.java
+│                   ├── controller
+│                   │   ├── AuctionWebSocketHandlerTest.java
+│                   │   └── BidControllerTest.java
+│                   ├── dao
+│                   │   ├── AuctionDaoTest.java
+│                   │   ├── AutoBidConfigDaoTest.java
+│                   │   ├── BidTransactionDaoTest.java
+│                   │   ├── ItemDaoTest.java
+│                   │   └── UserDaoTest.java
+│                   ├── exception
+│                   │   ├── AuctionClosedExceptionTest.java
+│                   │   ├── DuplicateExceptionTest.java
+│                   │   ├── InvalidBidExceptionTest.java
+│                   │   ├── NotFoundExceptionTest.java
+│                   │   └── UnauthorizedExceptionTest.java
+│                   ├── HttpAuthorizationIntegrationTest.java
+│                   ├── middleware
+│                   │   └── JwtMiddlewareTest.java
+│                   ├── model
+│                   │   └── ModelTest.java
+│                   ├── NotificationApiPersistenceTest.java
+│                   ├── NotificationPersistenceTest.java
+│                   ├── service
+│                   │   ├── AuctionCancellationNotificationIntegrationTest.java
+│                   │   ├── AuctionSchedulerSettlementTest.java
+│                   │   ├── AuctionServiceCreateIntegrationTest.java
+│                   │   ├── AuctionServiceTest.java
+│                   │   ├── BidServiceConcurrencyTest.java
+│                   │   ├── BidServiceTest.java
+│                   │   ├── UserServiceTest.java
+│                   │   └── WalletLedgerIntegrationTest.java
+│                   ├── SetupTest.java
+│                   └── util
+└── tree.txt

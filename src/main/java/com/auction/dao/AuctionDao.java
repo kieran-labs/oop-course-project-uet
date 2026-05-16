@@ -601,12 +601,19 @@ public class AuctionDao {
   }
 
   /**
-   * Xóa cứng phiên đấu giá cùng toàn bộ dữ liệu liên quan (bid_transactions, auto_bid_configs).
-   * Thực hiện trong 1 transaction để đảm bảo tính toàn vẹn dữ liệu.
+   * Xóa cứng phiên đấu giá cùng toàn bộ dữ liệu liên quan. Cascade order matters: every table that
+   * holds an FK to {@code auctions(id)} must be purged before the auction row itself, otherwise
+   * PostgreSQL rejects the DELETE with a foreign-key violation. {@code wallet_transactions}
+   * previously was missing here and silently blocked hard-deleting any PAID/FINISHED auction (it
+   * carries WIN_CONSUME / SELLER_PAYOUT rows).
    */
   public void hardDelete(Long id) {
     jdbi.useTransaction(
         handle -> {
+          handle
+              .createUpdate("DELETE FROM wallet_transactions WHERE auction_id = :id")
+              .bind("id", id)
+              .execute();
           handle
               .createUpdate("DELETE FROM auto_bid_configs WHERE auction_id = :id")
               .bind("id", id)

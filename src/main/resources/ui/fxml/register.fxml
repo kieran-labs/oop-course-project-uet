@@ -41,13 +41,13 @@
       <VBox spacing="6.0">
          <Label styleClass="field-label" text="MẬT KHẨU" />
          <PasswordField fx:id="passwordField" promptText="Ít nhất 6 ký tự"
-                        styleClass="text-field" />
+                        styleClass="text-field, password-field" />
       </VBox>
 
       <VBox spacing="6.0">
          <Label styleClass="field-label" text="XÁC NHẬN MẬT KHẨU" />
          <PasswordField fx:id="confirmPasswordField" promptText="Nhập lại mật khẩu"
-                        styleClass="text-field" />
+                        styleClass="text-field, password-field" />
       </VBox>
 
       <VBox spacing="6.0">
