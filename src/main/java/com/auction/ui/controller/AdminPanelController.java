@@ -69,6 +69,8 @@ public class AdminPanelController implements Navigable {
   private static final Logger LOGGER = LoggerFactory.getLogger(AdminPanelController.class);
   private static final NumberFormat VND = NumberFormat.getNumberInstance(Locale.of("vi", "VN"));
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final String ADMIN_SILVER = "#CBD5E1";
+  private static final String AUCTION_NAME_BROWN = "#8B5E34";
 
   @FXML private Label usernameLabel;
   @FXML private TableView<AuctionResponse> auctionTable;
@@ -596,13 +598,13 @@ public class AdminPanelController implements Navigable {
    * đồng bộ với design system của app.
    */
   private void confirmCancelAuction(AuctionResponse a) {
-    String name = a.getItemName() != null ? a.getItemName() : "#" + a.getId();
+    String auctionName = formatAuctionName(a);
     showConfirmDialog(
         "Xác nhận hủy phiên",
-        "Hủy phiên đấu giá #" + a.getId() + "?",
-        "Phiên \""
-            + name
-            + "\" sẽ chuyển sang trạng thái CANCELED.\n"
+        "Hủy phiên đấu giá #" + a.getId() + " - " + auctionName + "?",
+        "Phiên "
+            + auctionName
+            + " sẽ chuyển sang trạng thái CANCELED.\n"
             + "Seller và tất cả bidder đã tham gia sẽ nhận thông báo.\n"
             + "Người dẫn đầu (nếu có) sẽ được hoàn lại tiền giữ chỗ.\n"
             + "Thao tác này không thể hoàn tác.",
@@ -612,13 +614,13 @@ public class AdminPanelController implements Navigable {
 
   /** Hiện custom dialog xác nhận trước khi xóa cứng phiên — destructive action. */
   private void confirmHardDeleteAuction(AuctionResponse a) {
-    String name = a.getItemName() != null ? a.getItemName() : "#" + a.getId();
+    String auctionName = formatAuctionName(a);
     showConfirmDialog(
         "Xác nhận xóa vĩnh viễn",
-        "Xóa phiên đấu giá #" + a.getId() + "?",
-        "Phiên \""
-            + name
-            + "\" cùng toàn bộ lịch sử bid,\n"
+        "Xóa phiên đấu giá #" + a.getId() + " - " + auctionName + "?",
+        "Phiên "
+            + auctionName
+            + " cùng toàn bộ lịch sử bid,\n"
             + "auto-bid và giao dịch ví liên quan sẽ bị xóa\n"
             + "khỏi cơ sở dữ liệu. Thao tác này KHÔNG THỂ hoàn tác.",
         true,
@@ -637,6 +639,14 @@ public class AdminPanelController implements Navigable {
             + "lịch sử đấu giá, bid hoặc giao dịch liên quan.",
         true,
         () -> deleteUser(u.getId()));
+  }
+
+  private String formatAuctionName(AuctionResponse auction) {
+    String rawName =
+        auction.getItemName() != null && !auction.getItemName().isBlank()
+            ? auction.getItemName().trim()
+            : "#" + auction.getId();
+    return "[" + rawName + "]";
   }
 
   /**
@@ -665,124 +675,146 @@ public class AdminPanelController implements Navigable {
   private void showConfirmDialogImpl(
       String title, String header, String body, boolean danger, Runnable onConfirm) {
     javafx.stage.Stage dialog = new javafx.stage.Stage();
-    // WINDOW_MODAL (not APPLICATION_MODAL) — APPLICATION_MODAL + StageStyle.TRANSPARENT has
-    // a known Z-order bug on Windows where the transparent modal stage spawns BEHIND the
-    // owner window and is therefore invisible to the user. WINDOW_MODAL with a proper
-    // owner + setOnShown→toFront below puts it reliably on top.
+    // WINDOW_MODAL + StageStyle.TRANSPARENT + setOnShown→toFront — covers the Windows
+    // Z-order bug where APPLICATION_MODAL + TRANSPARENT spawns the dialog behind owner.
     dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
     dialog.initStyle(javafx.stage.StageStyle.TRANSPARENT);
     dialog.setTitle(title);
 
-    // ── Root overlay (semi-transparent dark backdrop) ──────────────────────
-    javafx.scene.layout.StackPane overlay = new javafx.scene.layout.StackPane();
-    overlay.setStyle("-fx-background-color: rgba(0,0,0,0.45);");
-
-    // ── Card ───────────────────────────────────────────────────────────────
-    javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(0);
-    card.setMaxWidth(420);
-    card.setStyle(
-        "-fx-background-color: #FFFFFF;"
-            + "-fx-background-radius: 16;"
-            + "-fx-border-color: #E8F0FE;"
-            + "-fx-border-width: 1;"
-            + "-fx-border-radius: 16;"
-            + "-fx-effect: dropshadow(gaussian, rgba(13,71,161,0.22), 32, 0.05, 0, 8);");
-
-    // ── Header strip ───────────────────────────────────────────────────────
-    String stripColor = danger ? "#DC2626" : "#D97706";
-    javafx.scene.layout.VBox headerStrip = new javafx.scene.layout.VBox(4);
-    headerStrip.setPadding(new javafx.geometry.Insets(20, 24, 16, 24));
-    headerStrip.setStyle(
-        "-fx-background-color: "
-            + (danger ? "#FEF2F2" : "#FFFBEB")
-            + ";"
-            + "-fx-background-radius: 15 15 0 0;");
-
-    javafx.scene.control.Label headerLabel = new javafx.scene.control.Label(header);
-    headerLabel.setWrapText(true);
-    headerLabel.setStyle(
-        "-fx-font-family: 'LexendSemiBold';"
-            + "-fx-font-size: 16px;"
-            + "-fx-text-fill: "
-            + stripColor
-            + ";"
-            + "-fx-font-smoothing-type: gray;");
-
-    headerStrip.getChildren().add(headerLabel);
-
-    // ── Body ───────────────────────────────────────────────────────────────
-    javafx.scene.layout.VBox bodyBox = new javafx.scene.layout.VBox(0);
-    bodyBox.setPadding(new javafx.geometry.Insets(16, 24, 20, 24));
-
-    javafx.scene.control.Label bodyLabel = new javafx.scene.control.Label(body);
-    bodyLabel.setWrapText(true);
-    bodyLabel.setStyle(
-        "-fx-font-family: 'Lexend';"
-            + "-fx-font-size: 13px;"
-            + "-fx-text-fill: #475569;"
-            + "-fx-line-spacing: 2;"
-            + "-fx-font-smoothing-type: gray;");
-    bodyBox.getChildren().add(bodyLabel);
-
-    // ── Divider ────────────────────────────────────────────────────────────
-    javafx.scene.control.Separator divider = new javafx.scene.control.Separator();
-    divider.setStyle("-fx-background-color: #E8F0FE;");
-
-    // ── Button row ─────────────────────────────────────────────────────────
-    javafx.scene.layout.HBox btnRow = new javafx.scene.layout.HBox(10);
-    btnRow.setPadding(new javafx.geometry.Insets(14, 24, 18, 24));
-    btnRow.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
-
-    javafx.scene.control.Button cancelBtn = new javafx.scene.control.Button("Hủy bỏ");
-    cancelBtn.setStyle(
-        "-fx-font-family: 'Lexend';"
-            + "-fx-font-size: 13px;"
-            + "-fx-font-weight: bold;"
-            + "-fx-text-fill: #64748B;"
-            + "-fx-background-color: #F1F5F9;"
-            + "-fx-border-color: #E2E8F0;"
-            + "-fx-border-width: 1.2;"
-            + "-fx-background-radius: 8;"
-            + "-fx-border-radius: 8;"
-            + "-fx-padding: 0 20 0 20;"
-            + "-fx-pref-height: 36;"
-            + "-fx-cursor: hand;"
-            + "-fx-font-smoothing-type: gray;");
-    cancelBtn.setOnMouseEntered(
-        e -> cancelBtn.setStyle(cancelBtn.getStyle().replace("#F1F5F9", "#E2E8F0")));
-    cancelBtn.setOnMouseExited(
-        e -> cancelBtn.setStyle(cancelBtn.getStyle().replace("#E2E8F0;", "#F1F5F9;")));
-
-    String confirmBg =
+    // ── Color palette: danger (red) for hard-delete, warning (amber) for soft-cancel ─
+    String accent = danger ? "#DC2626" : "#D97706";
+    String accentBg = danger ? "#FEE2E2" : "#FEF3C7";
+    String accentRing = danger ? "rgba(220,38,38,0.22)" : "rgba(217,119,6,0.22)";
+    String accentGradient =
         danger
             ? "linear-gradient(to bottom, #EF4444 0%, #DC2626 100%)"
             : "linear-gradient(to bottom, #F59E0B 0%, #D97706 100%)";
-    String confirmBgHover =
+    String accentGradientHover =
         danger
             ? "linear-gradient(to bottom, #DC2626 0%, #B91C1C 100%)"
             : "linear-gradient(to bottom, #D97706 0%, #B45309 100%)";
+    // Material Design SVG paths — trash bin for hard-delete, warning triangle for cancel.
+    String iconSvg =
+        danger
+            ? "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 "
+                + "0 0,0 18,19V7H6V19Z"
+            : "M13,14H11V10H13M13,18H11V16H13M1,21H23L12,2L1,21Z";
     String confirmLabel = danger ? "Xóa vĩnh viễn" : "Xác nhận hủy";
 
-    javafx.scene.control.Button confirmBtn = new javafx.scene.control.Button(confirmLabel);
-    confirmBtn.setStyle(
-        "-fx-font-family: 'LexendSemiBold';"
-            + "-fx-font-size: 13px;"
+    // ── Backdrop ──────────────────────────────────────────────────────────
+    // Slate-900 at 55% — premium feel vs pure black, matches app's #0F172A text color.
+    javafx.scene.layout.StackPane overlay = new javafx.scene.layout.StackPane();
+    overlay.setStyle("-fx-background-color: rgba(15, 23, 42, 0.55);");
+
+    // ── Card: floating white sheet with generous 20px radius ──────────────
+    javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(0);
+    card.setMaxWidth(440);
+    card.setAlignment(javafx.geometry.Pos.TOP_CENTER);
+    card.setStyle(
+        "-fx-background-color: #FFFFFF;"
+            + "-fx-background-radius: 20;"
+            + "-fx-border-color: rgba(226, 232, 240, 0.9);"
+            + "-fx-border-width: 1;"
+            + "-fx-border-radius: 20;"
+            + "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.32), 48, 0.15, 0, 16);");
+
+    // ── Icon badge: 76px tinted circle with SVG icon inside ───────────────
+    javafx.scene.layout.StackPane iconCircle = new javafx.scene.layout.StackPane();
+    iconCircle.setPrefSize(76, 76);
+    iconCircle.setMinSize(76, 76);
+    iconCircle.setMaxSize(76, 76);
+    iconCircle.setStyle(
+        "-fx-background-color: "
+            + accentBg
+            + ";"
+            + "-fx-background-radius: 38;"
+            + "-fx-effect: dropshadow(gaussian, "
+            + accentRing
+            + ", 16, 0.18, 0, 2);");
+
+    javafx.scene.layout.Region iconShape = new javafx.scene.layout.Region();
+    iconShape.setPrefSize(36, 36);
+    iconShape.setMinSize(36, 36);
+    iconShape.setMaxSize(36, 36);
+    iconShape.setStyle("-fx-background-color: " + accent + ";" + "-fx-shape: \"" + iconSvg + "\";");
+    iconCircle.getChildren().add(iconShape);
+
+    javafx.scene.layout.VBox iconWrap = new javafx.scene.layout.VBox(iconCircle);
+    iconWrap.setAlignment(javafx.geometry.Pos.CENTER);
+    iconWrap.setPadding(new javafx.geometry.Insets(32, 24, 6, 24));
+
+    // ── Title (header) ────────────────────────────────────────────────────
+    javafx.scene.text.TextFlow titleFlow =
+        createSemanticTextFlow(header, "#0F172A", 19, true, "Lexend");
+    titleFlow.setPrefWidth(376);
+
+    javafx.scene.layout.VBox titleWrap = new javafx.scene.layout.VBox(titleFlow);
+    titleWrap.setAlignment(javafx.geometry.Pos.CENTER);
+    titleWrap.setPadding(new javafx.geometry.Insets(18, 32, 0, 32));
+
+    // ── Body description ──────────────────────────────────────────────────
+    javafx.scene.text.TextFlow bodyFlow =
+        createSemanticTextFlow(body, "#64748B", 13.5, false, "Lexend");
+    bodyFlow.setPrefWidth(376);
+    bodyFlow.setLineSpacing(4);
+
+    javafx.scene.layout.VBox bodyWrap = new javafx.scene.layout.VBox(bodyFlow);
+    bodyWrap.setAlignment(javafx.geometry.Pos.CENTER);
+    bodyWrap.setPadding(new javafx.geometry.Insets(12, 32, 24, 32));
+
+    // ── Button row: two full-width buttons split equally ──────────────────
+    String cancelBaseBg = "#F1F5F9";
+    String cancelHoverBg = "#E2E8F0";
+    final String cancelBaseStyle =
+        "-fx-font-family: 'Lexend';"
+            + "-fx-font-weight: bold;"
+            + "-fx-font-size: 14px;"
+            + "-fx-text-fill: #475569;"
+            + "-fx-background-color: "
+            + cancelBaseBg
+            + ";"
+            + "-fx-background-radius: 10;"
+            + "-fx-border-color: transparent;"
+            + "-fx-padding: 0 22 0 22;"
+            + "-fx-pref-height: 44;"
+            + "-fx-min-height: 44;"
+            + "-fx-cursor: hand;"
+            + "-fx-font-smoothing-type: gray;";
+    final String cancelHoverStyle = cancelBaseStyle.replace(cancelBaseBg, cancelHoverBg);
+
+    javafx.scene.control.Button cancelBtn = new javafx.scene.control.Button("Hủy bỏ");
+    cancelBtn.setMaxWidth(Double.MAX_VALUE);
+    javafx.scene.layout.HBox.setHgrow(cancelBtn, javafx.scene.layout.Priority.ALWAYS);
+    cancelBtn.setStyle(cancelBaseStyle);
+    cancelBtn.setOnMouseEntered(e -> cancelBtn.setStyle(cancelHoverStyle));
+    cancelBtn.setOnMouseExited(e -> cancelBtn.setStyle(cancelBaseStyle));
+
+    final String confirmBaseStyle =
+        "-fx-font-family: 'Lexend';"
+            + "-fx-font-weight: bold;"
+            + "-fx-font-size: 14px;"
             + "-fx-text-fill: #FFFFFF;"
             + "-fx-background-color: "
-            + confirmBg
+            + accentGradient
             + ";"
+            + "-fx-background-radius: 10;"
             + "-fx-border-color: transparent;"
-            + "-fx-background-radius: 8;"
-            + "-fx-border-radius: 8;"
-            + "-fx-padding: 0 20 0 20;"
-            + "-fx-pref-height: 36;"
+            + "-fx-padding: 0 22 0 22;"
+            + "-fx-pref-height: 44;"
+            + "-fx-min-height: 44;"
             + "-fx-cursor: hand;"
-            + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 6, 0, 0, 2);"
-            + "-fx-font-smoothing-type: gray;");
-    confirmBtn.setOnMouseEntered(
-        e -> confirmBtn.setStyle(confirmBtn.getStyle().replace(confirmBg, confirmBgHover)));
-    confirmBtn.setOnMouseExited(
-        e -> confirmBtn.setStyle(confirmBtn.getStyle().replace(confirmBgHover, confirmBg)));
+            + "-fx-effect: dropshadow(gaussian, "
+            + accentRing
+            + ", 12, 0.1, 0, 4);"
+            + "-fx-font-smoothing-type: gray;";
+    final String confirmHoverStyle = confirmBaseStyle.replace(accentGradient, accentGradientHover);
+
+    javafx.scene.control.Button confirmBtn = new javafx.scene.control.Button(confirmLabel);
+    confirmBtn.setMaxWidth(Double.MAX_VALUE);
+    javafx.scene.layout.HBox.setHgrow(confirmBtn, javafx.scene.layout.Priority.ALWAYS);
+    confirmBtn.setStyle(confirmBaseStyle);
+    confirmBtn.setOnMouseEntered(e -> confirmBtn.setStyle(confirmHoverStyle));
+    confirmBtn.setOnMouseExited(e -> confirmBtn.setStyle(confirmBaseStyle));
 
     cancelBtn.setOnAction(e -> closeDialogWithAnimation(dialog, overlay));
     confirmBtn.setOnAction(
@@ -791,17 +823,22 @@ public class AdminPanelController implements Navigable {
           onConfirm.run();
         });
 
-    btnRow.getChildren().addAll(cancelBtn, confirmBtn);
-    card.getChildren().addAll(headerStrip, bodyBox, divider, btnRow);
+    javafx.scene.layout.HBox btnRow = new javafx.scene.layout.HBox(12, cancelBtn, confirmBtn);
+    btnRow.setAlignment(javafx.geometry.Pos.CENTER);
+    btnRow.setPadding(new javafx.geometry.Insets(0, 28, 28, 28));
+
+    card.getChildren().addAll(iconWrap, titleWrap, bodyWrap, btnRow);
     overlay.getChildren().add(card);
 
-    // ── Scene & stage ──────────────────────────────────────────────────────
-    // Pass explicit width/height to the Scene constructor so the stage always has a sane
-    // size even before show() — otherwise the scene defaults to root.prefSize, which can
-    // be 0 for an initially empty StackPane on some platforms (dialog invisible).
+    // ── Scene & stage ────────────────────────────────────────────────────
+    javafx.stage.Stage owner = resolveOwnerStage();
+    double sceneWidth = owner != null ? owner.getWidth() : 520;
+    double sceneHeight = owner != null ? owner.getHeight() : 420;
+
     javafx.scene.Scene scene =
-        new javafx.scene.Scene(overlay, 480, 280, javafx.scene.paint.Color.TRANSPARENT);
-    // Inherit the app stylesheet so Lexend fonts resolve correctly
+        new javafx.scene.Scene(
+            overlay, sceneWidth, sceneHeight, javafx.scene.paint.Color.TRANSPARENT);
+    scene.setFill(javafx.scene.paint.Color.TRANSPARENT);
     try {
       java.net.URL cssUrl = getClass().getResource("/css/style.css");
       if (cssUrl != null) {
@@ -811,48 +848,56 @@ public class AdminPanelController implements Navigable {
     }
     dialog.setScene(scene);
 
-    // Size dialog to content + padding
-    dialog.setWidth(480);
-    dialog.setHeight(280);
-
-    // Center over owner window. Defensive: skip owner wiring if the scene chain isn't
-    // ready — without this guard, a null owner.getScene() NPEs and the click silently
-    // does nothing.
-    javafx.stage.Stage owner = resolveOwnerStage();
     if (owner != null) {
       dialog.initOwner(owner);
-      dialog.setX(owner.getX() + (owner.getWidth() - dialog.getWidth()) / 2);
-      dialog.setY(owner.getY() + (owner.getHeight() - dialog.getHeight()) / 2);
+      dialog.setX(owner.getX());
+      dialog.setY(owner.getY());
+      dialog.setWidth(owner.getWidth());
+      dialog.setHeight(owner.getHeight());
+    } else {
+      dialog.setWidth(sceneWidth);
+      dialog.setHeight(sceneHeight);
     }
 
-    // ── Entrance animation: fade-in + scale-up ─────────────────────────────
+    // ── Entrance animation ────────────────────────────────────────────────
+    // Backdrop fades in (220ms) + card fades + scales 0.94→1.0 + slides up
+    // 16→0px (280ms, ease-out) — three-axis "settling in" feel.
     overlay.setOpacity(0);
-    card.setScaleX(0.88);
-    card.setScaleY(0.88);
+    card.setOpacity(0);
+    card.setScaleX(0.94);
+    card.setScaleY(0.94);
+    card.setTranslateY(16);
 
-    javafx.animation.FadeTransition fadeIn =
-        new javafx.animation.FadeTransition(javafx.util.Duration.millis(180), overlay);
-    fadeIn.setFromValue(0);
-    fadeIn.setToValue(1);
+    javafx.animation.FadeTransition overlayFadeIn =
+        new javafx.animation.FadeTransition(javafx.util.Duration.millis(220), overlay);
+    overlayFadeIn.setFromValue(0);
+    overlayFadeIn.setToValue(1);
+    overlayFadeIn.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
 
-    javafx.animation.ScaleTransition scaleIn =
-        new javafx.animation.ScaleTransition(javafx.util.Duration.millis(200), card);
-    scaleIn.setFromX(0.88);
-    scaleIn.setFromY(0.88);
-    scaleIn.setToX(1.0);
-    scaleIn.setToY(1.0);
-    // EASE_OUT (not the prior SPLINE(0.34, 1.56, 0.64, 1) with overshoot y=1.56) — the
-    // custom spline could throw IllegalArgumentException at play() on some JavaFX runtimes,
-    // leaving overlay stuck at opacity=0 → dialog invisible → user reported "nothing
-    // happens" on click.
-    scaleIn.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
+    javafx.animation.FadeTransition cardFadeIn =
+        new javafx.animation.FadeTransition(javafx.util.Duration.millis(280), card);
+    cardFadeIn.setFromValue(0);
+    cardFadeIn.setToValue(1);
+
+    javafx.animation.ScaleTransition cardScaleIn =
+        new javafx.animation.ScaleTransition(javafx.util.Duration.millis(280), card);
+    cardScaleIn.setFromX(0.94);
+    cardScaleIn.setFromY(0.94);
+    cardScaleIn.setToX(1.0);
+    cardScaleIn.setToY(1.0);
+
+    javafx.animation.TranslateTransition cardTransIn =
+        new javafx.animation.TranslateTransition(javafx.util.Duration.millis(280), card);
+    cardTransIn.setFromY(16);
+    cardTransIn.setToY(0);
+
+    javafx.animation.ParallelTransition cardAnim =
+        new javafx.animation.ParallelTransition(cardFadeIn, cardScaleIn, cardTransIn);
+    cardAnim.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
 
     javafx.animation.ParallelTransition openAnim =
-        new javafx.animation.ParallelTransition(fadeIn, scaleIn);
+        new javafx.animation.ParallelTransition(overlayFadeIn, cardAnim);
 
-    // Guarantee the transparent modal stage is on top + focused after show(). Without
-    // toFront(), a StageStyle.TRANSPARENT modal occasionally spawns under the owner on
-    // Windows and the user sees nothing happen.
     dialog.setOnShown(
         e -> {
           dialog.toFront();
@@ -864,6 +909,86 @@ public class AdminPanelController implements Navigable {
 
     dialog.show();
     openAnim.play();
+  }
+
+  private javafx.scene.text.TextFlow createSemanticTextFlow(
+      String value, String baseColor, double fontSize, boolean bold, String fontFamily) {
+    javafx.scene.text.TextFlow flow = new javafx.scene.text.TextFlow();
+    flow.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+    flow.setLineSpacing(2);
+    flow.setMaxWidth(Double.MAX_VALUE);
+
+    String text = value == null ? "" : value;
+    int index = 0;
+    while (index < text.length()) {
+      int bracketStart = text.indexOf('[', index);
+      int adminStart = text.indexOf("Admin", index);
+
+      int nextStart;
+      boolean auctionSegment;
+      if (bracketStart >= 0 && (adminStart < 0 || bracketStart < adminStart)) {
+        nextStart = bracketStart;
+        auctionSegment = true;
+      } else if (adminStart >= 0) {
+        nextStart = adminStart;
+        auctionSegment = false;
+      } else {
+        appendDialogText(flow, text.substring(index), baseColor, fontSize, bold, fontFamily);
+        break;
+      }
+
+      if (nextStart > index) {
+        appendDialogText(
+            flow, text.substring(index, nextStart), baseColor, fontSize, bold, fontFamily);
+      }
+
+      if (auctionSegment) {
+        int bracketEnd = text.indexOf(']', nextStart);
+        if (bracketEnd < 0) {
+          appendDialogText(flow, text.substring(nextStart), baseColor, fontSize, bold, fontFamily);
+          break;
+        }
+        appendDialogText(
+            flow,
+            text.substring(nextStart, bracketEnd + 1),
+            AUCTION_NAME_BROWN,
+            fontSize,
+            true,
+            fontFamily);
+        index = bracketEnd + 1;
+      } else {
+        appendDialogText(flow, "Admin", ADMIN_SILVER, fontSize, true, fontFamily);
+        index = nextStart + "Admin".length();
+      }
+    }
+
+    return flow;
+  }
+
+  private void appendDialogText(
+      javafx.scene.text.TextFlow flow,
+      String value,
+      String color,
+      double fontSize,
+      boolean bold,
+      String fontFamily) {
+    if (value == null || value.isEmpty()) {
+      return;
+    }
+    javafx.scene.text.Text text = new javafx.scene.text.Text(value);
+    text.setStyle(
+        "-fx-font-family: '"
+            + fontFamily
+            + "';"
+            + "-fx-font-size: "
+            + fontSize
+            + "px;"
+            + "-fx-fill: "
+            + color
+            + ";"
+            + (bold ? "-fx-font-weight: bold;" : "")
+            + "-fx-font-smoothing-type: gray;");
+    flow.getChildren().add(text);
   }
 
   /**
@@ -901,87 +1026,126 @@ public class AdminPanelController implements Navigable {
 
   private void showErrorDialogImpl(String header, String body) {
     javafx.stage.Stage dialog = new javafx.stage.Stage();
-    // WINDOW_MODAL + setOnShown→toFront — same Windows TRANSPARENT-stage Z-order fix as
-    // showConfirmDialog above (otherwise APPLICATION_MODAL + TRANSPARENT renders behind).
     dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
     dialog.initStyle(javafx.stage.StageStyle.TRANSPARENT);
     dialog.setTitle(header);
 
+    // Always red theme for errors (alert-circle icon, red-tinted badge, red CTA).
+    String accent = "#DC2626";
+    String accentBg = "#FEE2E2";
+    String accentRing = "rgba(220,38,38,0.22)";
+    String accentGradient = "linear-gradient(to bottom, #EF4444 0%, #DC2626 100%)";
+    String accentGradientHover = "linear-gradient(to bottom, #DC2626 0%, #B91C1C 100%)";
+    // Material alert-circle SVG path — distinct from confirm dialog's warning triangle.
+    String iconSvg =
+        "M11,15H13V17H11V15M11,7H13V13H11V7M12,2C6.47,2 2,6.5 2,12A10,10 "
+            + "0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z";
+
     javafx.scene.layout.StackPane overlay = new javafx.scene.layout.StackPane();
-    overlay.setStyle("-fx-background-color: rgba(0,0,0,0.45);");
+    overlay.setStyle("-fx-background-color: rgba(15, 23, 42, 0.55);");
 
     javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(0);
     card.setMaxWidth(440);
+    card.setAlignment(javafx.geometry.Pos.TOP_CENTER);
     card.setStyle(
         "-fx-background-color: #FFFFFF;"
-            + "-fx-background-radius: 16;"
-            + "-fx-border-color: #E8F0FE;"
+            + "-fx-background-radius: 20;"
+            + "-fx-border-color: rgba(226, 232, 240, 0.9);"
             + "-fx-border-width: 1;"
-            + "-fx-border-radius: 16;"
-            + "-fx-effect: dropshadow(gaussian, rgba(13,71,161,0.22), 32, 0.05, 0, 8);");
+            + "-fx-border-radius: 20;"
+            + "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.32), 48, 0.15, 0, 16);");
 
-    javafx.scene.layout.VBox headerStrip = new javafx.scene.layout.VBox(4);
-    headerStrip.setPadding(new javafx.geometry.Insets(20, 24, 16, 24));
-    headerStrip.setStyle("-fx-background-color: #FEF2F2; -fx-background-radius: 15 15 0 0;");
+    javafx.scene.layout.StackPane iconCircle = new javafx.scene.layout.StackPane();
+    iconCircle.setPrefSize(76, 76);
+    iconCircle.setMinSize(76, 76);
+    iconCircle.setMaxSize(76, 76);
+    iconCircle.setStyle(
+        "-fx-background-color: "
+            + accentBg
+            + ";"
+            + "-fx-background-radius: 38;"
+            + "-fx-effect: dropshadow(gaussian, "
+            + accentRing
+            + ", 16, 0.18, 0, 2);");
+    javafx.scene.layout.Region iconShape = new javafx.scene.layout.Region();
+    iconShape.setPrefSize(36, 36);
+    iconShape.setMinSize(36, 36);
+    iconShape.setMaxSize(36, 36);
+    iconShape.setStyle("-fx-background-color: " + accent + ";" + "-fx-shape: \"" + iconSvg + "\";");
+    iconCircle.getChildren().add(iconShape);
 
-    javafx.scene.control.Label headerLabel = new javafx.scene.control.Label(header);
-    headerLabel.setWrapText(true);
-    headerLabel.setStyle(
+    javafx.scene.layout.VBox iconWrap = new javafx.scene.layout.VBox(iconCircle);
+    iconWrap.setAlignment(javafx.geometry.Pos.CENTER);
+    iconWrap.setPadding(new javafx.geometry.Insets(32, 24, 6, 24));
+
+    javafx.scene.control.Label titleLabel = new javafx.scene.control.Label(header);
+    titleLabel.setWrapText(true);
+    titleLabel.setMaxWidth(Double.MAX_VALUE);
+    titleLabel.setAlignment(javafx.geometry.Pos.CENTER);
+    titleLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+    titleLabel.setStyle(
         "-fx-font-family: 'LexendSemiBold';"
-            + "-fx-font-size: 16px;"
-            + "-fx-text-fill: #DC2626;"
+            + "-fx-font-size: 19px;"
+            + "-fx-text-fill: #0F172A;"
             + "-fx-font-smoothing-type: gray;");
-    headerStrip.getChildren().add(headerLabel);
 
-    javafx.scene.layout.VBox bodyBox = new javafx.scene.layout.VBox(0);
-    bodyBox.setPadding(new javafx.geometry.Insets(16, 24, 20, 24));
+    javafx.scene.layout.VBox titleWrap = new javafx.scene.layout.VBox(titleLabel);
+    titleWrap.setAlignment(javafx.geometry.Pos.CENTER);
+    titleWrap.setPadding(new javafx.geometry.Insets(18, 32, 0, 32));
+
     javafx.scene.control.Label bodyLabel = new javafx.scene.control.Label(body);
     bodyLabel.setWrapText(true);
+    bodyLabel.setMaxWidth(Double.MAX_VALUE);
+    bodyLabel.setAlignment(javafx.geometry.Pos.CENTER);
+    bodyLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
     bodyLabel.setStyle(
         "-fx-font-family: 'Lexend';"
-            + "-fx-font-size: 13px;"
-            + "-fx-text-fill: #475569;"
-            + "-fx-line-spacing: 2;"
+            + "-fx-font-size: 13.5px;"
+            + "-fx-text-fill: #64748B;"
+            + "-fx-line-spacing: 4;"
             + "-fx-font-smoothing-type: gray;");
-    bodyBox.getChildren().add(bodyLabel);
 
-    javafx.scene.control.Separator divider = new javafx.scene.control.Separator();
-    divider.setStyle("-fx-background-color: #E8F0FE;");
+    javafx.scene.layout.VBox bodyWrap = new javafx.scene.layout.VBox(bodyLabel);
+    bodyWrap.setAlignment(javafx.geometry.Pos.CENTER);
+    bodyWrap.setPadding(new javafx.geometry.Insets(12, 32, 26, 32));
 
-    javafx.scene.layout.HBox btnRow = new javafx.scene.layout.HBox(10);
-    btnRow.setPadding(new javafx.geometry.Insets(14, 24, 18, 24));
-    btnRow.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
-
-    String confirmBg = "linear-gradient(to bottom, #EF4444 0%, #DC2626 100%)";
-    String confirmBgHover = "linear-gradient(to bottom, #DC2626 0%, #B91C1C 100%)";
-    javafx.scene.control.Button okBtn = new javafx.scene.control.Button("Đã hiểu");
-    okBtn.setStyle(
-        "-fx-font-family: 'LexendSemiBold';"
-            + "-fx-font-size: 13px;"
+    final String okBaseStyle =
+        "-fx-font-family: 'Lexend';"
+            + "-fx-font-weight: bold;"
+            + "-fx-font-size: 14px;"
             + "-fx-text-fill: #FFFFFF;"
             + "-fx-background-color: "
-            + confirmBg
+            + accentGradient
             + ";"
+            + "-fx-background-radius: 10;"
             + "-fx-border-color: transparent;"
-            + "-fx-background-radius: 8;"
-            + "-fx-border-radius: 8;"
-            + "-fx-padding: 0 26 0 26;"
-            + "-fx-pref-height: 36;"
+            + "-fx-padding: 0 22 0 22;"
+            + "-fx-pref-height: 44;"
+            + "-fx-min-height: 44;"
             + "-fx-cursor: hand;"
-            + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 6, 0, 0, 2);"
-            + "-fx-font-smoothing-type: gray;");
-    okBtn.setOnMouseEntered(
-        e -> okBtn.setStyle(okBtn.getStyle().replace(confirmBg, confirmBgHover)));
-    okBtn.setOnMouseExited(
-        e -> okBtn.setStyle(okBtn.getStyle().replace(confirmBgHover, confirmBg)));
+            + "-fx-effect: dropshadow(gaussian, "
+            + accentRing
+            + ", 12, 0.1, 0, 4);"
+            + "-fx-font-smoothing-type: gray;";
+    final String okHoverStyle = okBaseStyle.replace(accentGradient, accentGradientHover);
+
+    javafx.scene.control.Button okBtn = new javafx.scene.control.Button("Đã hiểu");
+    okBtn.setMaxWidth(Double.MAX_VALUE);
+    javafx.scene.layout.HBox.setHgrow(okBtn, javafx.scene.layout.Priority.ALWAYS);
+    okBtn.setStyle(okBaseStyle);
+    okBtn.setOnMouseEntered(e -> okBtn.setStyle(okHoverStyle));
+    okBtn.setOnMouseExited(e -> okBtn.setStyle(okBaseStyle));
     okBtn.setOnAction(e -> closeDialogWithAnimation(dialog, overlay));
 
-    btnRow.getChildren().add(okBtn);
-    card.getChildren().addAll(headerStrip, bodyBox, divider, btnRow);
+    javafx.scene.layout.HBox btnRow = new javafx.scene.layout.HBox(okBtn);
+    btnRow.setAlignment(javafx.geometry.Pos.CENTER);
+    btnRow.setPadding(new javafx.geometry.Insets(0, 28, 28, 28));
+
+    card.getChildren().addAll(iconWrap, titleWrap, bodyWrap, btnRow);
     overlay.getChildren().add(card);
 
     javafx.scene.Scene scene =
-        new javafx.scene.Scene(overlay, 500, 260, javafx.scene.paint.Color.TRANSPARENT);
+        new javafx.scene.Scene(overlay, 520, 420, javafx.scene.paint.Color.TRANSPARENT);
     try {
       java.net.URL cssUrl = getClass().getResource("/css/style.css");
       if (cssUrl != null) {
@@ -990,8 +1154,8 @@ public class AdminPanelController implements Navigable {
     } catch (Exception ignored) {
     }
     dialog.setScene(scene);
-    dialog.setWidth(500);
-    dialog.setHeight(260);
+    dialog.setWidth(520);
+    dialog.setHeight(420);
 
     javafx.stage.Stage owner = resolveOwnerStage();
     if (owner != null) {
@@ -1001,20 +1165,41 @@ public class AdminPanelController implements Navigable {
     }
 
     overlay.setOpacity(0);
-    card.setScaleX(0.88);
-    card.setScaleY(0.88);
-    javafx.animation.FadeTransition fadeIn =
-        new javafx.animation.FadeTransition(javafx.util.Duration.millis(180), overlay);
-    fadeIn.setFromValue(0);
-    fadeIn.setToValue(1);
-    javafx.animation.ScaleTransition scaleIn =
-        new javafx.animation.ScaleTransition(javafx.util.Duration.millis(200), card);
-    scaleIn.setFromX(0.88);
-    scaleIn.setFromY(0.88);
-    scaleIn.setToX(1.0);
-    scaleIn.setToY(1.0);
-    // EASE_OUT — same fix as showConfirmDialog (SPLINE overshoot could throw on play()).
-    scaleIn.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
+    card.setOpacity(0);
+    card.setScaleX(0.94);
+    card.setScaleY(0.94);
+    card.setTranslateY(16);
+
+    javafx.animation.FadeTransition overlayFadeIn =
+        new javafx.animation.FadeTransition(javafx.util.Duration.millis(220), overlay);
+    overlayFadeIn.setFromValue(0);
+    overlayFadeIn.setToValue(1);
+    overlayFadeIn.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
+
+    javafx.animation.FadeTransition cardFadeIn =
+        new javafx.animation.FadeTransition(javafx.util.Duration.millis(280), card);
+    cardFadeIn.setFromValue(0);
+    cardFadeIn.setToValue(1);
+
+    javafx.animation.ScaleTransition cardScaleIn =
+        new javafx.animation.ScaleTransition(javafx.util.Duration.millis(280), card);
+    cardScaleIn.setFromX(0.94);
+    cardScaleIn.setFromY(0.94);
+    cardScaleIn.setToX(1.0);
+    cardScaleIn.setToY(1.0);
+
+    javafx.animation.TranslateTransition cardTransIn =
+        new javafx.animation.TranslateTransition(javafx.util.Duration.millis(280), card);
+    cardTransIn.setFromY(16);
+    cardTransIn.setToY(0);
+
+    javafx.animation.ParallelTransition cardAnim =
+        new javafx.animation.ParallelTransition(cardFadeIn, cardScaleIn, cardTransIn);
+    cardAnim.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
+
+    javafx.animation.ParallelTransition openAnim =
+        new javafx.animation.ParallelTransition(overlayFadeIn, cardAnim);
+
     dialog.setOnShown(
         e -> {
           dialog.toFront();
@@ -1023,27 +1208,46 @@ public class AdminPanelController implements Navigable {
             dialog.centerOnScreen();
           }
         });
+
     dialog.show();
-    new javafx.animation.ParallelTransition(fadeIn, scaleIn).play();
+    openAnim.play();
   }
 
-  /** Animation thoát dialog: fade-out + scale-down, rồi đóng Stage. */
+  /**
+   * Animation thoát dialog: backdrop fade-out + card fade+scale-down+slide-down — mirror of the
+   * entrance ({@link #showConfirmDialogImpl}) so the close feels symmetric. Slightly faster than
+   * entrance (180ms vs 280ms) — dismissal should feel snappy.
+   */
   private void closeDialogWithAnimation(
       javafx.stage.Stage dialog, javafx.scene.layout.StackPane overlay) {
     javafx.scene.Node card = overlay.getChildren().get(0);
 
-    javafx.animation.FadeTransition fadeOut =
-        new javafx.animation.FadeTransition(javafx.util.Duration.millis(140), overlay);
-    fadeOut.setFromValue(1);
-    fadeOut.setToValue(0);
+    javafx.animation.FadeTransition overlayFadeOut =
+        new javafx.animation.FadeTransition(javafx.util.Duration.millis(180), overlay);
+    overlayFadeOut.setFromValue(1);
+    overlayFadeOut.setToValue(0);
 
-    javafx.animation.ScaleTransition scaleOut =
-        new javafx.animation.ScaleTransition(javafx.util.Duration.millis(140), card);
-    scaleOut.setToX(0.92);
-    scaleOut.setToY(0.92);
+    javafx.animation.FadeTransition cardFadeOut =
+        new javafx.animation.FadeTransition(javafx.util.Duration.millis(160), card);
+    cardFadeOut.setFromValue(1);
+    cardFadeOut.setToValue(0);
+
+    javafx.animation.ScaleTransition cardScaleOut =
+        new javafx.animation.ScaleTransition(javafx.util.Duration.millis(160), card);
+    cardScaleOut.setFromX(1.0);
+    cardScaleOut.setFromY(1.0);
+    cardScaleOut.setToX(0.96);
+    cardScaleOut.setToY(0.96);
+
+    javafx.animation.TranslateTransition cardTransOut =
+        new javafx.animation.TranslateTransition(javafx.util.Duration.millis(160), card);
+    cardTransOut.setFromY(0);
+    cardTransOut.setToY(8);
 
     javafx.animation.ParallelTransition closeAnim =
-        new javafx.animation.ParallelTransition(fadeOut, scaleOut);
+        new javafx.animation.ParallelTransition(
+            overlayFadeOut, cardFadeOut, cardScaleOut, cardTransOut);
+    closeAnim.setInterpolator(javafx.animation.Interpolator.EASE_IN);
     closeAnim.setOnFinished(e -> dialog.close());
     closeAnim.play();
   }
