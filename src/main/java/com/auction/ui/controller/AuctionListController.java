@@ -45,7 +45,6 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.stage.Popup;
-import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.slf4j.Logger;
@@ -300,17 +299,37 @@ public class AuctionListController implements Navigable {
 
     Popup popup = new Popup();
     popup.setAutoHide(true);
+    popup.setAutoFix(true);
+    popup.setHideOnEscape(true);
+
+    final double popupWidth = 320.0;
+    final double cornerRadius = 10.0;
+
+    ObservableList<NotificationItem> notifications = store.getNotifications();
+    int limit = Math.min(notifications.size(), 50);
+    boolean emptyState = notifications.isEmpty();
+
+    // Use explicit height instead of prefHeight() here. JavaFX can under-measure text/Separator
+    // before a Popup is attached to a Scene, which was clipping the header. The bottom corners were
+    // already correct in the previous version; this keeps that rounded-card approach but gives the
+    // content enough vertical room.
+    double listHeight = emptyState ? 0.0 : Math.min(300.0, Math.max(72.0, limit * 58.0));
+    final double popupHeight = emptyState ? 96.0 : 66.0 + listHeight;
+
+    javafx.scene.shape.Rectangle background =
+        new javafx.scene.shape.Rectangle(popupWidth, popupHeight);
+    background.setArcWidth(cornerRadius * 2.0);
+    background.setArcHeight(cornerRadius * 2.0);
+    background.setFill(javafx.scene.paint.Color.web("#1e2d40"));
+    background.setStroke(javafx.scene.paint.Color.rgb(33, 150, 243, 0.45));
+    background.setStrokeWidth(1.0);
 
     VBox content = new VBox(8);
     content.setPadding(new Insets(14, 16, 14, 16));
-    content.setPrefWidth(320);
-    content.setStyle(
-        "-fx-background-color: #1e2d40; "
-            + "-fx-border-color: rgba(33,150,243,0.45); "
-            + "-fx-border-width: 1; "
-            + "-fx-border-radius: 10; "
-            + "-fx-background-radius: 10; "
-            + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 14, 0, 0, 4);");
+    content.setMinSize(popupWidth, popupHeight);
+    content.setPrefSize(popupWidth, popupHeight);
+    content.setMaxSize(popupWidth, popupHeight);
+    content.setStyle("-fx-background-color: transparent; -fx-background-insets: 0;");
 
     Label header = new Label("Thông báo");
     header.setStyle("-fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold;");
@@ -319,41 +338,47 @@ public class AuctionListController implements Navigable {
     sep.setStyle("-fx-background-color: rgba(255,255,255,0.15);");
     content.getChildren().addAll(header, sep);
 
-    ObservableList<NotificationItem> notifications = store.getNotifications();
     ScrollPane scrollPane = null;
-    if (notifications.isEmpty()) {
+    if (emptyState) {
       Label empty = new Label("Chưa có thông báo nào.");
       empty.setStyle("-fx-text-fill: #94A3B8; -fx-font-size: 13px; -fx-padding: 4 0 4 0;");
       content.getChildren().add(empty);
     } else {
       VBox items = new VBox(4);
-      int limit = Math.min(notifications.size(), 50);
       // NotificationStore: index 0 = moi nhat, hien thi moi nhat o tren cung.
       for (int i = 0; i < limit; i++) {
         items.getChildren().add(buildNotificationRow(notifications.get(i).getMessage()));
       }
+
       scrollPane = new ScrollPane(items);
-      // Always reserve a tall viewport so the popup doesn't collapse to a single-row height
-      // when the user only has 1–2 notifications. Cap at ~1/3 of screen height so the popup
-      // never overflows the visible area.
-      double notifPopupHeight = Screen.getPrimary().getVisualBounds().getHeight() / 3.0;
-      scrollPane.setPrefViewportHeight(notifPopupHeight);
-      scrollPane.setMaxHeight(notifPopupHeight);
+      scrollPane.setPrefViewportHeight(listHeight);
+      scrollPane.setMinHeight(listHeight);
+      scrollPane.setMaxHeight(listHeight);
       scrollPane.setFitToWidth(true);
       scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
       scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
       scrollPane.setStyle(
           "-fx-background-color: transparent; "
               + "-fx-background: transparent; "
-              + "-fx-control-inner-background: transparent;");
+              + "-fx-control-inner-background: transparent; "
+              + "-fx-background-insets: 0; "
+              + "-fx-padding: 0;");
       content.getChildren().add(scrollPane);
     }
 
-    popup.getContent().add(content);
+    StackPane card = new StackPane(background, content);
+    card.setMinSize(popupWidth, popupHeight);
+    card.setPrefSize(popupWidth, popupHeight);
+    card.setMaxSize(popupWidth, popupHeight);
+    card.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+    StackPane.setAlignment(background, javafx.geometry.Pos.TOP_LEFT);
+    StackPane.setAlignment(content, javafx.geometry.Pos.TOP_LEFT);
+
+    popup.getContent().setAll(card);
     Stage stage = (Stage) bellButton.getScene().getWindow();
     javafx.geometry.Bounds bounds = bellButton.localToScreen(bellButton.getBoundsInLocal());
-    popup.show(
-        stage, bounds.getMinX() - content.getPrefWidth() + bounds.getWidth(), bounds.getMaxY() + 6);
+    popup.show(stage, bounds.getMinX() - popupWidth + bounds.getWidth(), bounds.getMaxY() + 8);
+
     ScrollPane shownScrollPane = scrollPane;
     if (shownScrollPane != null) {
       Platform.runLater(() -> shownScrollPane.setVvalue(0.0));

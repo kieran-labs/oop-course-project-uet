@@ -8,7 +8,6 @@ import com.auction.exception.NotFoundException;
 import com.auction.model.PasswordResetRecord;
 import com.auction.model.User;
 import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.List;
 import org.jdbi.v3.core.Jdbi;
 
@@ -20,12 +19,14 @@ import org.jdbi.v3.core.Jdbi;
  * <ol>
  *   <li>User gọi {@link #requestReset(String)} với email đã đăng ký → tạo bản ghi PENDING.
  *   <li>Admin xem danh sách PENDING qua {@link #getPendingRequests()}.
- *   <li>Admin duyệt qua {@link #approveReset(Long)} → tạo mật khẩu tạm thời một lần.
+ *   <li>Admin duyệt qua {@link #approveReset(Long)} → tạo mật khẩu mới 6 ký tự (a-z, 0-9).
  *   <li>Hoặc Admin từ chối qua {@link #rejectReset(Long)}.
  * </ol>
  */
 public class PasswordResetService {
 
+  private static final String RESET_PASSWORD_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+  private static final int RESET_PASSWORD_LENGTH = 6;
   private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
   private final UserDao userDao;
@@ -39,9 +40,12 @@ public class PasswordResetService {
   }
 
   private static String generateTempPassword() {
-    byte[] bytes = new byte[9]; // produces 12-char base64url string
-    SECURE_RANDOM.nextBytes(bytes);
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    StringBuilder password = new StringBuilder(RESET_PASSWORD_LENGTH);
+    for (int i = 0; i < RESET_PASSWORD_LENGTH; i++) {
+      int index = SECURE_RANDOM.nextInt(RESET_PASSWORD_CHARS.length());
+      password.append(RESET_PASSWORD_CHARS.charAt(index));
+    }
+    return password.toString();
   }
 
   /**
@@ -79,7 +83,7 @@ public class PasswordResetService {
   }
 
   /**
-   * Admin phê duyệt: tạo mật khẩu tạm thời, đổi status → APPROVED.
+   * Admin phê duyệt: tạo mật khẩu mới 6 ký tự (a-z, 0-9), đổi status → APPROVED.
    *
    * @param requestId ID của yêu cầu
    * @throws NotFoundException nếu không tìm thấy yêu cầu hoặc tài khoản
@@ -95,15 +99,15 @@ public class PasswordResetService {
           if (!"PENDING".equals(record.getStatus())) {
             throw new IllegalStateException("Yêu cầu này đã được xử lý rồi.");
           }
-          String tempPwd = generateTempPassword();
-          String hash = BCrypt.withDefaults().hashToString(12, tempPwd.toCharArray());
+          String resetPassword = generateTempPassword();
+          String hash = BCrypt.withDefaults().hashToString(12, resetPassword.toCharArray());
           handle
               .createUpdate("UPDATE users SET password_hash = :h WHERE id = :id")
               .bind("h", hash)
               .bind("id", record.getUserId())
               .execute();
           resetDao.transitionStatusInTransaction(handle, requestId, "PENDING", "APPROVED");
-          return tempPwd;
+          return resetPassword;
         });
   }
 

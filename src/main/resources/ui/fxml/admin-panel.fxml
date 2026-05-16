@@ -118,6 +118,9 @@
                </placeholder>
             </TableView>
 
+            <Label fx:id="passwordResetStatusLabel" styleClass="status-label" text=""
+                   visible="false" managed="false" wrapText="true" />
+
             <Separator />
 
             <!-- ===== User management ===== -->
