@@ -1090,25 +1090,43 @@
 
 .auction-table {
     -fx-background-color: #FFFFFF;
+    -fx-background-insets: 0;
     -fx-border-color: #E8F0FE;
     -fx-border-radius: 12;
     -fx-background-radius: 12;
     -fx-border-width: 1;
+    -fx-padding: 0;
     -fx-table-cell-border-color: #F1F5F9;
     -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.08), 12, 0, 0, 2);
 }
 
+/*
+   Keep the blue table header and JavaFX's right-side header filler/menu nodes on the same
+   rounded layer. Without these explicit rules, the default white filler/scroll-corner can show
+   through at the top-right corner of admin tables.
+*/
 .auction-table .column-header-background {
     -fx-background-color: #1565C0;
-    -fx-background-radius: 11 11 0 0;
+    -fx-background-insets: 0;
+    -fx-background-radius: 12 12 0 0;
 }
 
+.auction-table .column-header-background .filler,
 .auction-table .filler {
     -fx-background-color: #1565C0;
+    -fx-background-insets: 0;
+    -fx-background-radius: 0 12 0 0;
+}
+
+.auction-table .show-hide-columns-button {
+    -fx-background-color: #1565C0;
+    -fx-background-insets: 0;
+    -fx-background-radius: 0 12 0 0;
 }
 
 .auction-table .column-header {
     -fx-background-color: transparent;
+    -fx-background-insets: 0;
     -fx-size: 46;
 }
 

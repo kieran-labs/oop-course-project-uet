@@ -293,7 +293,7 @@ public class App {
               .json(
                   Map.of(
                       "message",
-                      "Mật khẩu tạm thời đã được tạo. Hiển thị cho user một lần duy nhất.",
+                      "Mật khẩu mới đã được tạo gồm 6 ký tự chữ thường và số.",
                       "tempPassword",
                       tempPwd));
         });

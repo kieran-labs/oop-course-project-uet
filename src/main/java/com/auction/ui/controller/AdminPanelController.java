@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
  *   <li><b>Yêu cầu nạp tiền</b> — Duyệt hoặc từ chối DepositRecord đang PENDING; tự động poll mỗi 5
  *       giây.
  *   <li><b>Đặt lại mật khẩu</b> — Duyệt hoặc từ chối PasswordResetRecord đang PENDING; khi duyệt,
- *       server tạo mật khẩu tạm thời một lần.
+ *       server tạo mật khẩu mới 6 ký tự.
  * </ol>
  *
  * <p><b>Các phương thức chính:</b>
@@ -103,6 +103,7 @@ public class AdminPanelController implements Navigable {
   @FXML private TableColumn<PasswordResetRecord, String> prEmailCol;
   @FXML private TableColumn<PasswordResetRecord, java.time.LocalDateTime> prTimeCol;
   @FXML private TableColumn<PasswordResetRecord, Void> prActionCol;
+  @FXML private Label passwordResetStatusLabel;
 
   private final ObservableList<AuctionResponse> allAuctions = FXCollections.observableArrayList();
   private final ObservableList<UserResponse> allUsers = FXCollections.observableArrayList();
@@ -396,8 +397,8 @@ public class AdminPanelController implements Navigable {
 
   /**
    * Duyệt yêu cầu đặt lại mật khẩu qua {@code POST
-   * /api/admin/password-reset-requests/{id}/approve}. Server sẽ tạo mật khẩu tạm thời một lần và
-   * đánh dấu yêu cầu là APPROVED.
+   * /api/admin/password-reset-requests/{id}/approve}. Server sẽ tạo mật khẩu mới 6 ký tự và đánh
+   * dấu yêu cầu là APPROVED.
    */
   private void approvePasswordReset(Long id) {
     Thread.ofVirtual()
@@ -409,19 +410,20 @@ public class AdminPanelController implements Navigable {
                 Platform.runLater(
                     () -> {
                       if (response.statusCode() == 200) {
-                        setStatus(
-                            "Mật khẩu tạm thời cho yêu cầu #"
+                        setPasswordResetStatus(
+                            "Đã duyệt yêu cầu #"
                                 + id
-                                + ": "
+                                + ". Mật khẩu mới: "
                                 + extractTempPassword(response.body()));
                         loadPasswordResetRequests();
                       } else {
-                        setStatus("Duyệt thất bại: " + response.statusCode());
+                        setPasswordResetStatus("Duyệt thất bại: " + response.statusCode(), true);
                       }
                     });
               } catch (Exception e) {
                 LOGGER.error("Lỗi duyệt password reset {}", id, e);
-                Platform.runLater(() -> setStatus("Không thể kết nối đến server."));
+                Platform.runLater(
+                    () -> setPasswordResetStatus("Không thể kết nối đến server.", true));
               }
             });
   }
@@ -450,15 +452,16 @@ public class AdminPanelController implements Navigable {
                 Platform.runLater(
                     () -> {
                       if (response.statusCode() == 204) {
-                        setStatus("Đã từ chối yêu cầu đặt lại mật khẩu #" + id);
+                        setPasswordResetStatus("Đã từ chối yêu cầu đặt lại mật khẩu #" + id);
                         loadPasswordResetRequests();
                       } else {
-                        setStatus("Từ chối thất bại: " + response.statusCode());
+                        setPasswordResetStatus("Từ chối thất bại: " + response.statusCode(), true);
                       }
                     });
               } catch (Exception e) {
                 LOGGER.error("Lỗi từ chối password reset {}", id, e);
-                Platform.runLater(() -> setStatus("Không thể kết nối đến server."));
+                Platform.runLater(
+                    () -> setPasswordResetStatus("Không thể kết nối đến server.", true));
               }
             });
   }
@@ -1507,6 +1510,21 @@ public class AdminPanelController implements Navigable {
       depositRefreshTimeline.stop();
       depositRefreshTimeline = null;
     }
+  }
+
+  private void setPasswordResetStatus(String text) {
+    setPasswordResetStatus(text, false);
+  }
+
+  private void setPasswordResetStatus(String text, boolean isError) {
+    if (passwordResetStatusLabel == null) {
+      setStatus(text);
+      return;
+    }
+    passwordResetStatusLabel.setText(text);
+    passwordResetStatusLabel.getStyleClass().setAll(isError ? "error-label" : "status-label");
+    passwordResetStatusLabel.setVisible(true);
+    passwordResetStatusLabel.setManaged(true);
   }
 
   /** Hiển thị thông báo trạng thái trên thanh status của màn hình quản trị. */
