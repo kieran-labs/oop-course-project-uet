@@ -314,13 +314,23 @@ public class AuctionService {
             .findById(auctionId)
             .orElseThrow(() -> new NotFoundException("Auction not found: " + auctionId));
 
-    // ADMIN: được hủy bất chấp mọi trạng thái
+    // ADMIN: chỉ được hủy phiên CHƯA kết thúc (OPEN / RUNNING). Với phiên đã FINISHED / PAID
+    // / CANCELED, admin phải dùng hardDelete để xóa khỏi DB thay vì soft-cancel — soft-cancel
+    // một phiên đã thanh toán không có ý nghĩa nghiệp vụ.
     if ("ADMIN".equals(role)) {
-      AuctionStatus previousStatus = auction.getStatus();
+      AuctionStatus status = auction.getStatus();
+      if (status != AuctionStatus.OPEN && status != AuctionStatus.RUNNING) {
+        throw new IllegalStateException(
+            "Chỉ có thể hủy phiên đấu giá khi đang ở trạng thái OPEN hoặc RUNNING."
+                + " Trạng thái hiện tại: "
+                + status
+                + ". Hãy dùng nút Xóa để xóa phiên đã kết thúc.");
+      }
+      AuctionStatus previousStatus = status;
       auction.setStatus(AuctionStatus.CANCELED);
-      persistCanceledAuction(auction, previousStatus);
+      persistCanceledAuction(auction, previousStatus, "ADMIN");
       emitCancellationIfNeeded(auction, previousStatus);
-      LOGGER.info("ADMIN (userId={}) đã cưỡng chế hủy phiên đấu giá #{}", userId, auctionId);
+      LOGGER.info("ADMIN (userId={}) đã hủy phiên đấu giá #{}", userId, auctionId);
       return;
     }
 
@@ -353,7 +363,7 @@ public class AuctionService {
 
       AuctionStatus previousStatus = status;
       auction.setStatus(AuctionStatus.CANCELED);
-      persistCanceledAuction(auction, previousStatus);
+      persistCanceledAuction(auction, previousStatus, "SELLER");
       emitCancellationIfNeeded(auction, previousStatus);
       LOGGER.info(
           "SELLER (userId={}) đã hủy phiên đấu giá #{} (trạng thái trước: {})",
@@ -368,8 +378,13 @@ public class AuctionService {
   }
 
   /**
-   * Xóa cứng phiên đấu giá khỏi DB (chỉ ADMIN). Chỉ cho phép khi status là OPEN và chưa có
-   * bid_transactions. Mọi trường hợp khác phải dùng soft-cancel (DELETE /api/auctions/{id}).
+   * Xóa cứng phiên đấu giá khỏi DB (chỉ ADMIN). Áp dụng cho mọi trạng thái — DAO sẽ cascade xóa
+   * wallet_transactions / bid_transactions / auto_bid_configs trước khi xóa hàng auction.
+   *
+   * <p>Khác với soft-cancel ({@link #delete(Long, Long, String)}): soft-cancel giữ lại bản ghi và
+   * đổi status sang CANCELED + thông báo cho người dẫn đầu; hard-delete xóa sạch không để lại dấu
+   * vết. Thông báo được gửi qua WebSocket trước khi xóa vì sau khi xóa không còn dữ liệu để truy
+   * vấn.
    */
   public void hardDelete(Long auctionId) {
     Auction auction =
@@ -377,18 +392,15 @@ public class AuctionService {
             .findById(auctionId)
             .orElseThrow(() -> new NotFoundException("Auction not found: " + auctionId));
 
-    if (auction.getStatus() != AuctionStatus.OPEN) {
-      throw new IllegalStateException(
-          "Hard delete is only allowed for OPEN auctions with no bid history."
-              + " Current status: "
-              + auction.getStatus()
-              + ". Use DELETE /api/auctions/{id} to soft-cancel instead.");
-    }
-
-    if (bidTransactionDao.countByAuctionId(auctionId) > 0) {
-      throw new IllegalStateException(
-          "Hard delete is not allowed when bid history exists."
-              + " Use DELETE /api/auctions/{id} to soft-cancel instead.");
+    // Emit WebSocket AUCTION_ENDED trước khi xóa — sau khi xóa không còn dữ liệu
+    if (eventManager != null) {
+      try {
+        BidUpdateMessage msg =
+            BidUpdateMessage.auctionEnded(auction.getId(), auction.getCurrentPrice(), null, null);
+        eventManager.notifyAuctionEnd(auction.getId(), msg);
+      } catch (Exception e) {
+        LOGGER.warn("Không thể broadcast AUCTION_ENDED trước khi hard-delete phiên #{}", auctionId);
+      }
     }
 
     auctionDao.hardDelete(auctionId);
@@ -426,16 +438,15 @@ public class AuctionService {
   }
 
   private void emitCancellationIfNeeded(Auction auction, AuctionStatus previousStatus) {
-    if (eventManager != null
-        && previousStatus != AuctionStatus.CANCELED
-        && auction.getLeadingBidderId() != null) {
+    if (eventManager != null && previousStatus != AuctionStatus.CANCELED) {
       BidUpdateMessage msg =
           BidUpdateMessage.auctionEnded(auction.getId(), auction.getCurrentPrice(), null, null);
       eventManager.notifyAuctionEnd(auction.getId(), msg);
     }
   }
 
-  private void persistCanceledAuction(Auction auction, AuctionStatus previousStatus) {
+  private void persistCanceledAuction(
+      Auction auction, AuctionStatus previousStatus, String actorRole) {
     if (jdbi == null) {
       auctionDao.update(auction);
       return;
@@ -456,21 +467,51 @@ public class AuctionService {
                 "auction_cancel:" + auction.getId());
           }
           auctionDao.updateInTransaction(handle, auction);
-          insertCancellationNotificationInTransaction(handle, auction, previousStatus);
+          insertCancellationNotificationInTransaction(handle, auction, previousStatus, actorRole);
         });
   }
 
   private void insertCancellationNotificationInTransaction(
-      org.jdbi.v3.core.Handle handle, Auction auction, AuctionStatus previousStatus) {
-    if (previousStatus == AuctionStatus.CANCELED || auction.getLeadingBidderId() == null) {
+      org.jdbi.v3.core.Handle handle,
+      Auction auction,
+      AuctionStatus previousStatus,
+      String actorRole) {
+    if (previousStatus == AuctionStatus.CANCELED) {
       return;
     }
+    String byWho = "ADMIN".equals(actorRole) ? "Admin" : "người bán";
+    String message = "Phiên đấu giá #" + auction.getId() + " đã bị hủy bởi " + byWho;
 
-    handle.execute(
-        "INSERT INTO notifications (user_id, message, notification_type) "
-            + "VALUES (?, ?, 'AUCTION_CANCELED')",
-        auction.getLeadingBidderId(),
-        "Phiên đấu giá #" + auction.getId() + " đã bị hủy bởi người bán.");
+    // Tập hợp tất cả người nhận: leadingBidder + tất cả bidder đã từng đặt giá + seller
+    java.util.Set<Long> recipients = new java.util.LinkedHashSet<>();
+
+    // Tất cả bidder đã từng tham gia phiên (kể cả những người không còn dẫn đầu)
+    java.util.List<Long> allBidders =
+        handle
+            .createQuery(
+                "SELECT DISTINCT bidder_id FROM bid_transactions WHERE auction_id = :auctionId")
+            .bind("auctionId", auction.getId())
+            .mapTo(Long.class)
+            .list();
+    recipients.addAll(allBidders);
+
+    // Seller của phiên (nếu có)
+    if (auction.getSellerId() != null) {
+      recipients.add(auction.getSellerId());
+    }
+
+    // Fallback: nếu chưa có bid nào nhưng có leadingBidder thì vẫn notify
+    if (auction.getLeadingBidderId() != null) {
+      recipients.add(auction.getLeadingBidderId());
+    }
+
+    for (Long recipientId : recipients) {
+      handle.execute(
+          "INSERT INTO notifications (user_id, message, notification_type) "
+              + "VALUES (?, ?, 'AUCTION_CANCELED')",
+          recipientId,
+          message);
+    }
   }
 
   private Auction toAuction(AuctionResponse response) {

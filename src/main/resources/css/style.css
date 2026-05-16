@@ -43,6 +43,15 @@
     font-weight: bold;
 }
 
+/* Lexend SemiBold registered as its own family — JavaFX's @font-face matcher only
+   distinguishes normal vs. bold within a family, so an intermediate weight has to live
+   under a separate family name. Used by the top-bar logout button to land between the
+   navy header's regular labels and the heavier "bold" weight. */
+@font-face {
+    font-family: 'LexendSemiBold';
+    src: url('../fonts/Lexend-SemiBold.ttf');
+}
+
 /* ----------------------------------------------------------------
    ROOT
    ---------------------------------------------------------------- */
@@ -658,19 +667,19 @@
     -fx-border-color: #991B1B;
 }
 
-/* Top-bar logout — mirrors .username-label exactly (same translucent white
-   pill, same 34px height, same rounded radius) so the two top-bar chips
-   read as a balanced pair. Font is one step larger (15px vs username's
-   13px) so the "Đăng xuất" label has visual weight. */
+/* Top-bar logout — square 8px radius matching .back-button so destructive / navigation
+   chips share one geometry vocabulary. SemiBold weight (Lexend SemiBold registered as its
+   own family above) is one notch lighter than Bold for a less heavy "Đăng xuất" label —
+   the visual weight increase from 13→15px would otherwise read too thick. */
 .logout-button {
-    -fx-font-size: 15px;
-    -fx-font-weight: bold;
+    -fx-font-family: 'LexendSemiBold';
+    -fx-font-size: 16px;
     -fx-text-fill: rgba(255,255,255,0.94);
     -fx-background-color: rgba(255,255,255,0.16);
     -fx-border-color: rgba(255,255,255,0.32);
     -fx-border-width: 1.2;
-    -fx-background-radius: 20;
-    -fx-border-radius: 20;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
     -fx-padding: 0 18 0 14;
     -fx-pref-height: 34;
     -fx-min-height: 34;
@@ -691,18 +700,18 @@
     -fx-effect: none;
 }
 
-/* Material Symbols "logout" Filled — chunky doorway + thick rightward arrow.
-   Centered horizontally so the glyph balances the "Đăng xuất" label next to
-   it instead of feeling drawn from the top corner. */
+/* Material Symbols "logout" — arrow-right-from-bracket style: clean rightward
+   arrow exiting through the right edge, reads instantly as "exit / sign out".
+   Slightly larger (20px) to balance the heavier 16px LexendSemiBold label. */
 .logout-icon {
-    -fx-shape: "M9 21h-4c-1.1 0-2-.9-2-2v-14c0-1.1.9-2 2-2h4v2h-4v14h4v2zm6.293-5.293l1.414 1.414 5.121-5.121-5.121-5.121-1.414 1.414 2.707 2.707h-8.586v2h8.586l-2.707 2.707z";
+    -fx-shape: "M5 3h7v2H5v14h7v2H5c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2zm10.293 3.293l1.414 1.414L13.414 11H22v2h-8.586l3.293 3.293-1.414 1.414L9.586 12l5.707-5.707z";
     -fx-background-color: white;
-    -fx-min-width: 18;
-    -fx-min-height: 18;
-    -fx-pref-width: 18;
-    -fx-pref-height: 18;
-    -fx-max-width: 18;
-    -fx-max-height: 18;
+    -fx-min-width: 20;
+    -fx-min-height: 20;
+    -fx-pref-width: 20;
+    -fx-pref-height: 20;
+    -fx-max-width: 20;
+    -fx-max-height: 20;
     -fx-scale-shape: true;
 }
 
@@ -825,12 +834,15 @@
     -fx-effect: dropshadow(gaussian, rgba(21,101,192,0.16), 6, 0, 0, 0);
 }
 
-/* PasswordField inherits .text-field geometry + Lexend font so the bullets
-   match the username field. No font override here — keeping the same font
-   stack everywhere prevents the password row from looking like a different
-   typeface than the rest of the form. */
+/* PasswordField inherits .text-field geometry + Lexend font so the password row stays
+   visually in sync with the username field. The bullet glyph in Lexend renders chunky at
+   14px under grayscale AA (the project-wide default), so we override smoothing back to
+   LCD here — the password card sits on a solid white surface where LCD AA does not
+   produce visible colour fringes, and the subpixel rendering removes the "răng cưa"
+   jaggies on the bullets without changing the typeface. */
 .password-field {
     -fx-font-size: 14px;
+    -fx-font-smoothing-type: lcd;
 }
 
 .text-area {

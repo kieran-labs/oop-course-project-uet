@@ -446,7 +446,7 @@ public class AuctionScheduler {
                 String commonMsg =
                     String.format(
                         Locale.of("vi", "VN"),
-                        "Phiên %s đã kết thúc. Người thắng: %s với giá %,d VND.",
+                        "🏁 Phiên %s đã kết thúc — Người thắng: %s với giá %,d VND",
                         auctionLabel,
                         winnerLabel,
                         price.longValue());
@@ -475,7 +475,7 @@ public class AuctionScheduler {
                 String commonMsg =
                     String.format(
                         Locale.of("vi", "VN"),
-                        "Phiên %s đã kết thúc nhưng thất bại: người thắng %s không đủ tiền thanh toán %,d VND.",
+                        "🏁 Phiên %s đã kết thúc nhưng thất bại: người thắng %s không đủ tiền thanh toán %,d VND",
                         auctionLabel,
                         winnerLabel,
                         price.longValue());
@@ -489,7 +489,7 @@ public class AuctionScheduler {
               String commonMsg =
                   String.format(
                       Locale.of("vi", "VN"),
-                      "Phiên %s đã kết thúc — không có ai đặt giá. Phiên đấu giá thất bại.",
+                      "🏁 Phiên %s đã kết thúc — không có ai đặt giá. Phiên đấu giá thất bại",
                       auctionLabel);
               broadcastAuctionResult(
                   handle, userNotifications, bidderAudience, sellerId, commonMsg);

@@ -32,7 +32,7 @@
       <VBox spacing="6.0">
          <Label styleClass="field-label" text="MẬT KHẨU" />
          <PasswordField fx:id="passwordField" promptText="Nhập mật khẩu"
-                        styleClass="text-field"
+                        styleClass="text-field, password-field"
                         onAction="#handleLogin" />
       </VBox>
 
