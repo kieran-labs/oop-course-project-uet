@@ -1623,6 +1623,12 @@
     -fx-scale-shape: true;
 }
 
+.notification-popup {
+    -fx-background-color: #1e2d40;
+    -fx-border-color: rgba(33, 150, 243, 0.45);
+    -fx-border-width: 1;
+}
+
 .notification-badge {
     -fx-background-color: #DC2626;
     -fx-text-fill: white;

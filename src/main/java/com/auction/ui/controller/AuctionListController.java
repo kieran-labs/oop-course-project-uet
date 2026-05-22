@@ -388,13 +388,11 @@ public class AuctionListController implements Navigable {
     panel.setPrefWidth(panelWidth);
     panel.setMaxWidth(panelWidth);
     panel.setPadding(new Insets(14, 16, 14, 16));
+    panel.getStyleClass().add("notification-popup");
     panel.setStyle(
-        "-fx-background-color: #1e2d40;"
-            + " -fx-background-radius: "
+        "-fx-background-radius: "
             + cornerRadius
             + ";"
-            + " -fx-border-color: rgba(33,150,243,0.45);"
-            + " -fx-border-width: 1;"
             + " -fx-border-radius: "
             + cornerRadius
             + ";");
