@@ -91,7 +91,7 @@ class RunningStateTest {
   void editRejected() {
     AuctionClosedException ex =
         assertThrows(AuctionClosedException.class, () -> state.edit(runningAuction()));
-    assertTrue(ex.getMessage().contains("đang diễn ra"));
+    assertTrue(ex.getMessage().toLowerCase().contains("running"));
   }
 
   @Test

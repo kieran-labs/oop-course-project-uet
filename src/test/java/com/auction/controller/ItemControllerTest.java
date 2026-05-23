@@ -46,7 +46,9 @@ class ItemControllerTest {
       m.invoke(null, ctx, svc);
     } catch (InvocationTargetException ite) {
       Throwable cause = ite.getCause();
-      if (cause instanceof RuntimeException re) throw re;
+      if (cause instanceof RuntimeException re) {
+        throw re;
+      }
       throw ite;
     }
   }

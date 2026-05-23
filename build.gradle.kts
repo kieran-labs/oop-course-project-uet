@@ -265,6 +265,12 @@ tasks.test {
 //     com/auction/util/UserBalanceWatcher.class   : an integration HTTP server running.
 //   - com/auction/util/NotificationStore.class  : JavaFX singleton
 //                                                 (ObservableList / Property).
+//   - com/auction/controller/AuctionWebSocketHandler.class : WebSocket transport layer —
+//                                                 requires live Javalin WsContext objects
+//                                                 that cannot be instantiated in unit tests
+//                                                 without a running Javalin server; all
+//                                                 business logic it delegates to is fully
+//                                                 tested (AuctionEventManager, BidService).
 val jacocoExclusions = listOf(
     "com/auction/ui/**",
     "com/auction/App.class",
@@ -274,7 +280,8 @@ val jacocoExclusions = listOf(
     "com/auction/util/WebSocketClient.class",
     "com/auction/util/BackgroundBidWatcher.class",
     "com/auction/util/UserBalanceWatcher.class",
-    "com/auction/util/NotificationStore.class"
+    "com/auction/util/NotificationStore.class",
+    "com/auction/controller/AuctionWebSocketHandler.class"
 )
 
 tasks.jacocoTestReport {

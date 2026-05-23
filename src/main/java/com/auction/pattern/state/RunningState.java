@@ -88,12 +88,12 @@ public class RunningState implements AuctionState {
 
     // Ràng buộc 2: seller không được tự đặt giá cho phiên của chính mình
     if (bidderId.equals(auction.getSellerId())) {
-      throw new InvalidBidException("Seller không thể đặt giá cho phiên của chính mình");
+      throw new InvalidBidException("Seller cannot bid on their own auction");
     }
 
     // Ràng buộc 3: bidder đang dẫn đầu không được tự đặt giá tiếp (tránh bid ảo, tăng giá ảo)
     if (bidderId.equals(auction.getLeadingBidderId())) {
-      throw new InvalidBidException("Bạn đang là người dẫn đầu, không thể đặt giá tiếp.");
+      throw new InvalidBidException("You are already the leading bidder");
     }
 
     // Cập nhật in-memory — BidService sẽ chịu trách nhiệm persist & notify sau bước này
@@ -125,9 +125,9 @@ public class RunningState implements AuctionState {
   @Override
   public void edit(Auction auction) {
     throw new AuctionClosedException(
-        "Không thể chỉnh sửa phiên #"
+        "Cannot edit auction #"
             + auction.getId()
-            + " khi đang diễn ra. Dừng phiên trước khi chỉnh sửa.");
+            + " while it is running. Close the auction before editing.");
   }
 
   /**
