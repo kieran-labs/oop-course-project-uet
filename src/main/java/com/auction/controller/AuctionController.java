@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
  *   GET    /api/auctions/:id       → Mọi user đã đăng nhập (trả về AuctionResponse đầy đủ)
  *   POST   /api/auctions           → Chỉ SELLER
  *   PUT    /api/auctions/:id       → Chỉ SELLER sở hữu phiên, chỉ khi status=OPEN
- *   DELETE /api/auctions/:id       → SELLER sở hữu phiên hoặc ADMIN
+ *   DELETE /api/auctions/:id       → SELLER sở hữu phiên hoặc ADMIN; service quyết định trạng thái được hủy
  * </pre>
  *
  * <p>Tích hợp State Pattern:
@@ -198,7 +198,8 @@ public class AuctionController {
    * </ul>
    *
    * <p>Những trường có thể cập nhật khi OPEN: {@code startingPrice}, {@code startTime}, {@code
-   * endTime}. Không thể đổi {@code itemId} sau khi tạo phiên.
+   * endTime}. Service kiểm tra final time range sau khi merge partial update. Không thể đổi {@code
+   * itemId} sau khi tạo phiên.
    *
    * @param ctx Javalin context chứa HTTP request/response
    * @param auctionService service cập nhật phiên sau khi qua State pattern validation
@@ -227,14 +228,15 @@ public class AuctionController {
    * <p>Logic phân quyền:
    *
    * <ul>
-   *   <li>Role {@code ADMIN} → có thể hủy bất kỳ phiên nào ở mọi trạng thái.
-   *   <li>Role {@code SELLER} → chỉ hủy được phiên của chính mình khi status là {@code OPEN} hoặc
-   *       {@code RUNNING} (cho phép hủy trong trường hợp bất khả kháng).
+   *   <li>Role {@code ADMIN} → có thể soft-cancel auction ở trạng thái {@code OPEN} hoặc {@code
+   *       RUNNING}. Các trạng thái đã kết thúc dùng endpoint admin hard-delete nếu cần cleanup.
+   *   <li>Role {@code SELLER} → chỉ hủy được auction của chính mình khi status là {@code OPEN};
+   *       auction {@code RUNNING} chỉ ADMIN được hủy.
    *   <li>Role {@code BIDDER} → không được phép → {@code UnauthorizedException}.
    * </ul>
    *
-   * <p>Hệ thống không xóa cứng (hard delete) mà chuyển status sang {@code CANCELED} để đảm bảo toàn
-   * vẹn lịch sử bid.
+   * <p>Endpoint này không xóa cứng (hard delete) mà chuyển status sang {@code CANCELED}. Admin hard
+   * delete dùng route riêng {@code DELETE /api/admin/auctions/:id}.
    *
    * @param ctx Javalin context chứa HTTP request/response
    * @param auctionService service xử lý hủy phiên đấu giá
