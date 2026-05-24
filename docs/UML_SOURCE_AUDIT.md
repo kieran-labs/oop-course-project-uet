@@ -81,8 +81,10 @@ These are the remaining issues if the README is judged as a strict source-level 
 |---|---|---|---|
 | High | `InlineAppRoutes` is not a real source class. | The README says the diagrams are source-code grounded, but this node is synthetic. | Remove it from `classDiagram` and keep inline routes only in the Markdown route table, or mark it explicitly as `<<conceptual>>`. |
 | High | Strict nested types are documented in this audit but not yet drawn in the README diagrams. | The source tree shows real named nested types such as `BidHistoryEntry`, `BalanceChange`, `SettlementResult`, `ResizeDirection`, `GlassDateCell`, and `GlassCalendarState`. | Add a seventh Mermaid diagram: `Source-Level Nested Types and Helpers`. |
+| Medium | `AuctionStates` in README diagram 2 lists only `OPEN`, `RUNNING`, and `FINISHED`. | Source `AuctionStates` has six singleton fields: `OPEN`, `RUNNING`, `SETTLING`, `FINISHED`, `PAID`, `CANCELED`. Diagram 5 is correct, but diagram 2 is inconsistent. | Add `SETTLING`, `PAID`, and `CANCELED` to diagram 2. |
 | Medium | `AuctionWebSocketHandler` in README omits source methods `notifyBalanceChange()`, `notifyUser()`, `getConnectionCount()`, and important private cleanup/token methods. | The class body is representative, but not complete enough for strict 1-1 auditing. | Add the missing major public methods and 2-3 private helpers. |
 | Medium | `BidTransactionDao` in README only lists `insert()` and `findByAuctionId()`. | Source also has `findByBidderId()`, `findById()`, `findLastBid()`, `findWithUsernames()`, `countByAuctionId()`, `getHighestPrice()`, `deleteByAuctionId()`, and nested `BidHistoryEntry`. | Expand the DAO method list or add a DAO-detail diagram. |
+| Medium | DTO class bodies omit many setters, constructors, and constants/factory details. | Request DTOs such as `RegisterRequest`, `CreateItemRequest`, `CreateAuctionRequest`, `BidRequest`, and `AutoBidRequest` all have setters; `BidUpdateMessage` also has message-type constants and full getters/setters. | Either expand DTO bodies or add an explicit note that DTO diagrams list major API-facing fields/factory methods only. |
 | Medium | JavaFX controller diagrams are intentionally compressed and still omit source-level helper records/classes. | `AuctionListController.BalanceDisplay`, `CreateAuctionController.GlassDateCell`, `CreateAuctionController.GlassCalendarState`, and `SceneManager.ResizeDirection` are source-level named types. | Add those types to the JavaFX diagram or the seventh nested-types diagram. |
 | Low | `AuctionStateFactory` omits private constructor `-AuctionStateFactory()`. | Source is a utility class with a private constructor. | Add `-AuctionStateFactory()` to diagram 5. |
 | Low | Some class members are representative rather than exhaustive. | This is acceptable for presentation UML but not for a strict source mirror. | Add a note that diagrams list representative members, or expand every class body. |
@@ -92,7 +94,7 @@ These are the remaining issues if the README is judged as a strict source-level 
 - Top-level source-file coverage: **complete**.
 - Compiler-generated anonymous classes: **correctly excluded**.
 - Source-level nested named types: **identified but not fully integrated into README diagrams yet**.
-- Strict 1-1 README class diagram accuracy: **not perfect yet** because `InlineAppRoutes` is synthetic and nested source-level helpers still need a dedicated diagram.
+- Strict 1-1 README class diagram accuracy: **not perfect yet** because `InlineAppRoutes` is synthetic, diagram 2 has an incomplete `AuctionStates` declaration, DTO bodies are compressed, and nested source-level helpers still need a dedicated diagram.
 
 The safest final documentation strategy is:
 
