@@ -185,6 +185,14 @@ Endpoint paths are kept in Markdown tables, not inside Mermaid `classDiagram` bo
 | Auto-bid | `GET/POST/DELETE /api/auctions/{id}/auto-bid` |
 | WebSocket | `/ws/auction/{id}`, `/ws/user/{id}` |
 
+### Relationship Audit Notes
+
+- Arrows now represent **source-code dependency or stored foreign-key reference** when possible, not only conceptual ownership.
+- `Auction --> Item` and `Auction --> Seller` are used because `Auction` stores `itemId` and `sellerId`.
+- `BidTransaction --> Auction/Bidder` and `AutoBidConfig --> Auction/Bidder` are used because those records store the corresponding IDs.
+- `AuctionWebSocketHandler` both creates/stores `WebSocketObserver` instances and is called back by `WebSocketObserver.broadcast(...)`, so the observer relation is intentionally bidirectional in the pattern diagram.
+- Classes that are intentionally stateless in source, such as concrete State implementations, still list their implemented methods so no UML node is empty.
+
 ---
 
 ## Class Diagrams
@@ -369,9 +377,16 @@ classDiagram
     App --> NotificationController
     App --> AuctionWebSocketHandler
     App --> AuctionScheduler
+    AuthController --> UserService
+    AuthController --> PasswordResetService
+    ItemController --> ItemService
+    AuctionController --> AuctionService
+    BidController --> BidService
+    NotificationController --> NotificationService
     JwtMiddleware --> JwtUtil
     JwtMiddleware --> UserDao
     AuctionWebSocketHandler --> JwtUtil
+    AuctionWebSocketHandler --> UserDao
     AuctionWebSocketHandler --> AuctionEventManager
     AuctionWebSocketHandler --> WebSocketObserver
     AuctionScheduler --> AuctionDao
@@ -571,15 +586,26 @@ classDiagram
     PasswordResetService --> UserDao
     PasswordResetService --> PasswordResetRequestDao
     ItemService --> ItemDao
+    ItemService --> ItemFactory
     AuctionService --> AuctionDao
     AuctionService --> ItemDao
     AuctionService --> UserDao
     AuctionService --> BidTransactionDao
+    AuctionService --> WalletTransactionDao
+    AuctionService --> AuctionEventManager
+    AuctionService --> AuctionWebSocketHandler
+    AuctionService --> AuctionStates
+    AuctionService --> MoneyValidator
+    AuctionService --> NotificationFormat
     BidService --> AuctionDao
     BidService --> BidTransactionDao
     BidService --> AutoBidConfigDao
     BidService --> UserDao
     BidService --> AuctionService
+    BidService --> AutoBidStrategy
+    BidService --> AuctionEventManager
+    BidService --> AuctionWebSocketHandler
+    BidService --> MoneyValidator
     BidService ..> WalletTransactionDao
     NotificationService --> NotificationDao
 ```
@@ -778,17 +804,18 @@ classDiagram
     Entity <|-- Auction
     Entity <|-- BidTransaction
     Entity <|-- AutoBidConfig
-    Seller --> Item
-    Item --> Auction
-    Auction --> BidTransaction
-    Bidder --> BidTransaction
-    Auction --> AutoBidConfig
-    Bidder --> AutoBidConfig
-    Bidder --> DepositRecord
-    User --> PasswordResetRecord
+    Item --> Seller
+    Auction --> Item
+    Auction --> Seller
     Auction --> AuctionStatus
+    BidTransaction --> Auction
+    BidTransaction --> Bidder
+    AutoBidConfig --> Auction
+    AutoBidConfig --> Bidder
     AutoBidConfig --> AutoBidStatus
     AutoBidConfig --> AutoBidFailureReason
+    DepositRecord --> Bidder
+    PasswordResetRecord --> User
 ```
 
 ### 4. DTOs, WebSocket Contracts, and Exceptions
@@ -924,20 +951,34 @@ classDiagram
         +userNotification()
     }
 
-    class InvalidBidException
-    class AuctionClosedException
-    class UnauthorizedException
-    class NotFoundException
-    class DuplicateException
+    class InvalidBidException {
+        +InvalidBidException()
+    }
 
-    UserResponse ..> User
-    AuctionResponse ..> Auction
-    BidUpdateMessage ..> Auction
-    ErrorResponse ..> InvalidBidException
-    ErrorResponse ..> AuctionClosedException
-    ErrorResponse ..> UnauthorizedException
-    ErrorResponse ..> NotFoundException
-    ErrorResponse ..> DuplicateException
+    class AuctionClosedException {
+        +AuctionClosedException()
+    }
+
+    class UnauthorizedException {
+        +UnauthorizedException()
+    }
+
+    class NotFoundException {
+        +NotFoundException()
+    }
+
+    class DuplicateException {
+        +DuplicateException()
+    }
+
+    UserResponse --> User
+    AuctionResponse --> Auction
+    BidUpdateMessage --> Auction
+    ErrorResponse --> InvalidBidException
+    ErrorResponse --> AuctionClosedException
+    ErrorResponse --> UnauthorizedException
+    ErrorResponse --> NotFoundException
+    ErrorResponse --> DuplicateException
 ```
 
 ### 5. Design Patterns and Realtime Collaboration
@@ -968,6 +1009,7 @@ classDiagram
     }
 
     class AuctionStates {
+        -AuctionStates()
         +OPEN
         +RUNNING
         +SETTLING
@@ -976,12 +1018,47 @@ classDiagram
         +CANCELED
     }
 
-    class OpenState
-    class RunningState
-    class SettlingState
-    class FinishedState
-    class PaidState
-    class CanceledState
+    class OpenState {
+        +placeBid()
+        +close()
+        +edit()
+        +extend()
+    }
+
+    class RunningState {
+        +placeBid()
+        +close()
+        +edit()
+        +extend()
+    }
+
+    class SettlingState {
+        +placeBid()
+        +close()
+        +edit()
+        +extend()
+    }
+
+    class FinishedState {
+        +placeBid()
+        +close()
+        +edit()
+        +extend()
+    }
+
+    class PaidState {
+        +placeBid()
+        +close()
+        +edit()
+        +extend()
+    }
+
+    class CanceledState {
+        +placeBid()
+        +close()
+        +edit()
+        +extend()
+    }
 
     class AuctionEventListener {
         <<interface>>
@@ -1006,6 +1083,7 @@ classDiagram
         +onBidUpdate()
         +onTimeExtended()
         +onAuctionEnd()
+        +getAuctionId()
     }
 
     class AutoBidStrategy {
@@ -1025,25 +1103,33 @@ classDiagram
         +execute()
     }
 
-    UserFactory ..> User
-    ItemFactory ..> Item
+    UserFactory --> Admin
+    UserFactory --> Seller
+    UserFactory --> Bidder
+    ItemFactory --> Electronics
+    ItemFactory --> Art
+    ItemFactory --> Vehicle
     AuctionStateFactory --> AuctionStates
-    AuctionStateFactory ..> AuctionState
-    AuctionState <|.. OpenState
-    AuctionState <|.. RunningState
-    AuctionState <|.. SettlingState
-    AuctionState <|.. FinishedState
-    AuctionState <|.. PaidState
-    AuctionState <|.. CanceledState
+    AuctionStateFactory --> AuctionState
     AuctionStates --> OpenState
     AuctionStates --> RunningState
     AuctionStates --> SettlingState
     AuctionStates --> FinishedState
     AuctionStates --> PaidState
     AuctionStates --> CanceledState
+    AuctionState <|.. OpenState
+    AuctionState <|.. RunningState
+    AuctionState <|.. SettlingState
+    AuctionState <|.. FinishedState
+    AuctionState <|.. PaidState
+    AuctionState <|.. CanceledState
     AuctionEventListener <|.. WebSocketObserver
     AuctionEventManager --> AuctionEventListener
+    AuctionEventManager --> BidUpdateMessage
+    AuctionWebSocketHandler --> WebSocketObserver
     WebSocketObserver --> AuctionWebSocketHandler
+    AutoBidStrategy --> AutoBidConfigDao
+    AutoBidStrategy --> UserDao
     AutoBidStrategy --> AutoBidConfig
     AutoBidStrategy --> AutoBidExecutor
     AutoBidStrategy --> InTransactionBidExecutor
@@ -1093,18 +1179,130 @@ classDiagram
         +invalidateCache()
     }
 
-    class WelcomeController
-    class LoginController
-    class RegisterController
-    class ForgotPasswordController
-    class AuctionListController
-    class AuctionDetailController
-    class CreateItemController
-    class CreateAuctionController
-    class ProfileController
-    class DepositController
-    class ChangePasswordController
-    class AdminPanelController
+    class WelcomeController {
+        +goToLoginAsAdmin()
+        +goToLoginAsBidder()
+        +goToLoginAsSeller()
+    }
+
+    class LoginController {
+        -usernameField
+        -passwordField
+        -expectedRole
+        +onDataReceived()
+        +onNavigatedTo()
+        +onNavigatedFrom()
+        +handleLogin()
+        +goToRegister()
+        +goToForgotPassword()
+    }
+
+    class RegisterController {
+        -usernameField
+        -emailField
+        -passwordField
+        -roleCombo
+        +onNavigatedTo()
+        +handleRegister()
+        +goToLogin()
+    }
+
+    class ForgotPasswordController {
+        -emailField
+        -submitButton
+        +onNavigatedTo()
+        +handleSubmit()
+    }
+
+    class AuctionListController {
+        -auctionTable
+        -auctions
+        -refreshTimeline
+        +onNavigatedTo()
+        +onNavigatedFrom()
+        +handleSearch()
+        +loadAuctions()
+        +handleBellClick()
+    }
+
+    class AuctionDetailController {
+        -auctionId
+        -currentAuction
+        -webSocketClient
+        -countdownTimeline
+        +onDataReceived()
+        +onNavigatedTo()
+        +onNavigatedFrom()
+        +handleBid()
+        +handleAutoBid()
+        +handleCancelAutoBid()
+        +loadAuctionDetail()
+    }
+
+    class CreateItemController {
+        -nameField
+        -descriptionField
+        -categoryCombo
+        +onNavigatedTo()
+        +handleCategoryChange()
+        +handleCreate()
+        +goBack()
+    }
+
+    class CreateAuctionController {
+        -itemCombo
+        -startingPriceField
+        -startDatePicker
+        -endDatePicker
+        +onNavigatedTo()
+        +handleCreate()
+        +goToCreateItem()
+        +goBack()
+    }
+
+    class ProfileController {
+        -usernameLabel
+        -roleLabel
+        -profileBalanceLabel
+        +onNavigatedTo()
+        +onNavigatedFrom()
+        +goToChangePassword()
+        +goToDeposit()
+        +handleLogout()
+    }
+
+    class DepositController {
+        -amountField
+        -historyList
+        -depositPollTimeline
+        +onNavigatedTo()
+        +onNavigatedFrom()
+        +handleDeposit()
+        +loadBalance()
+        +loadHistory()
+    }
+
+    class ChangePasswordController {
+        -currentPasswordField
+        -newPasswordField
+        -confirmPasswordField
+        +onNavigatedTo()
+        +handleChangePassword()
+    }
+
+    class AdminPanelController {
+        -auctionTable
+        -userTable
+        -depositTable
+        -passwordResetTable
+        +onNavigatedTo()
+        +onNavigatedFrom()
+        +handleRefresh()
+        +handleSearch()
+        +handleRefreshDeposits()
+        +handleRefreshPasswordResets()
+        +handleLogout()
+    }
 
     class RestClient {
         -BASE_URL
@@ -1189,20 +1387,13 @@ classDiagram
     SceneManager --> NotificationStore
     SceneManager --> BackgroundBidWatcher
     SceneManager --> UserBalanceWatcher
-    Navigable <|.. LoginController
-    Navigable <|.. RegisterController
-    Navigable <|.. ForgotPasswordController
-    Navigable <|.. AuctionListController
-    Navigable <|.. AuctionDetailController
-    Navigable <|.. CreateItemController
-    Navigable <|.. CreateAuctionController
-    Navigable <|.. ProfileController
-    Navigable <|.. DepositController
-    Navigable <|.. ChangePasswordController
-    Navigable <|.. AdminPanelController
     WelcomeController --> SceneManager
     LoginController --> RestClient
+    LoginController --> SceneManager
+    LoginController --> UserBalanceWatcher
     RegisterController --> RestClient
+    RegisterController --> SceneManager
+    RegisterController --> UserBalanceWatcher
     ForgotPasswordController --> RestClient
     AuctionListController --> RestClient
     AuctionListController --> NotificationStore
@@ -1222,6 +1413,18 @@ classDiagram
     BackgroundBidWatcher --> NotificationStore
     UserBalanceWatcher --> WebSocketClient
     UserBalanceWatcher --> NotificationStore
+    NotificationStore --> NotificationItem
+    Navigable <|.. LoginController
+    Navigable <|.. RegisterController
+    Navigable <|.. ForgotPasswordController
+    Navigable <|.. AuctionListController
+    Navigable <|.. AuctionDetailController
+    Navigable <|.. CreateItemController
+    Navigable <|.. CreateAuctionController
+    Navigable <|.. ProfileController
+    Navigable <|.. DepositController
+    Navigable <|.. ChangePasswordController
+    Navigable <|.. AdminPanelController
 ```
 
 ---
@@ -1423,7 +1626,7 @@ rm -rf data logs
 | Bui Ngoc Phu Hung | [@HumaNormal](https://github.com/HumaNormal) | Backend Lead | Javalin server, REST controllers, WebSocket handler, DAOs, Flyway, database config |
 | Tran Anh Duc | [@kieran-lucas](https://github.com/kieran-lucas) | Frontend Lead | JavaFX controllers, FXML screens, SceneManager, notifications UI, CSS theme, Lexend integration |
 | Nguyen Dinh Viet Duc | [@Black1206-coder](https://github.com/Black1206-coder) | Business Logic | Services, design patterns, exception hierarchy, JWT, BCrypt authentication |
-| Bui Quang Huy | [@stillqhuy](https://github.com/stillqhuy) | DevOps & QA | GitHub Actions, JUnit tests, Gradle configuration, Checkstyle, Spotless, SpotBugs, documentation |
+| Bui Quang Huy | [@stillqhuy](https://github.com/stillqhuy) | DevOps & QA | GitHub Actions, JUnit tests, Gradle configuration, Checkstyle, SpotBugs, documentation |
 
 ---
 
