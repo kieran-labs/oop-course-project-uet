@@ -76,8 +76,8 @@ import org.slf4j.LoggerFactory;
  * <p>Biến môi trường:
  *
  * <ul>
- *   <li>Database mặc định dùng Embedded PostgreSQL tại {@code data/postgres}; nếu cấu hình
- *       {@code DB_URL}, {@code DB_USER}, {@code DB_PASSWORD} thì có thể dùng PostgreSQL ngoài.
+ *   <li>Database mặc định dùng Embedded PostgreSQL tại {@code data/postgres}; nếu cấu hình {@code
+ *       DB_URL}, {@code DB_USER}, {@code DB_PASSWORD} thì có thể dùng PostgreSQL ngoài.
  *   <li>JWT_SECRET — required JWT signing key; must be at least 32 bytes in UTF-8.
  * </ul>
  */
