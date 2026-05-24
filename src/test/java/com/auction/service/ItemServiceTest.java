@@ -186,7 +186,8 @@ class ItemServiceTest {
       when(itemDao.findById(ITEM_ID))
           .thenReturn(Optional.of(buildItem(SELLER_ID, "IN_AUCTION")));
 
-      assertThrows(IllegalStateException.class, () -> service.update(ITEM_ID, buildRequest(), SELLER_ID));
+      assertThrows(
+          IllegalStateException.class, () -> service.update(ITEM_ID, buildRequest(), SELLER_ID));
       verify(itemDao, never()).update(any());
     }
 
@@ -195,7 +196,8 @@ class ItemServiceTest {
     void cannotUpdateSoldItem() {
       when(itemDao.findById(ITEM_ID)).thenReturn(Optional.of(buildItem(SELLER_ID, "SOLD")));
 
-      assertThrows(IllegalStateException.class, () -> service.update(ITEM_ID, buildRequest(), SELLER_ID));
+      assertThrows(
+          IllegalStateException.class, () -> service.update(ITEM_ID, buildRequest(), SELLER_ID));
       verify(itemDao, never()).update(any());
     }
 
@@ -204,7 +206,8 @@ class ItemServiceTest {
     void cannotUpdateRemovedItem() {
       when(itemDao.findById(ITEM_ID)).thenReturn(Optional.of(buildItem(SELLER_ID, "REMOVED")));
 
-      assertThrows(IllegalStateException.class, () -> service.update(ITEM_ID, buildRequest(), SELLER_ID));
+      assertThrows(
+          IllegalStateException.class, () -> service.update(ITEM_ID, buildRequest(), SELLER_ID));
       verify(itemDao, never()).update(any());
     }
 
