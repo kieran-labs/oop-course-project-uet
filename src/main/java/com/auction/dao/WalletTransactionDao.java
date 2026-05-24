@@ -4,11 +4,17 @@ import java.math.BigDecimal;
 import org.jdbi.v3.core.Handle;
 
 /**
- * DAO ghi sổ cái ví người dùng — append-only (chỉ thêm, không sửa/xóa).
+ * DAO ghi sổ cái ví người dùng trong các luồng nghiệp vụ bình thường — append-only (chỉ thêm,
+ * không sửa/xóa).
  *
  * <p>Mỗi lần số dư hoặc reserved_balance thay đổi đều phải ghi một bản ghi vào bảng {@code
- * wallet_transactions}. Thiết kế append-only đảm bảo audit trail đầy đủ: bất kỳ tranh chấp nào về
- * số dư đều có thể được tái hiện bằng cách replay toàn bộ lịch sử giao dịch.
+ * wallet_transactions}. Trong vận hành bình thường, thiết kế append-only đảm bảo audit trail đầy
+ * đủ: bất kỳ tranh chấp nào về số dư đều có thể được tái hiện bằng cách replay toàn bộ lịch sử
+ * giao dịch.
+ *
+ * <p>Ngoại lệ có chủ đích: luồng admin hard-delete auction là destructive cleanup. Luồng đó có thể
+ * xóa các ledger rows gắn với auction bị purge để dọn khóa ngoại trước khi xóa auction row. Không
+ * dùng hard-delete như một nghiệp vụ tài chính thông thường.
  *
  * <p>Các loại giao dịch ({@code kind}):
  *
