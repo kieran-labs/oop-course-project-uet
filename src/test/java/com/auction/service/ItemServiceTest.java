@@ -183,8 +183,7 @@ class ItemServiceTest {
     @Test
     @DisplayName("không được cập nhật item đang trong phiên đấu giá")
     void cannotUpdateItemInAuction() {
-      when(itemDao.findById(ITEM_ID))
-          .thenReturn(Optional.of(buildItem(SELLER_ID, "IN_AUCTION")));
+      when(itemDao.findById(ITEM_ID)).thenReturn(Optional.of(buildItem(SELLER_ID, "IN_AUCTION")));
 
       assertThrows(
           IllegalStateException.class, () -> service.update(ITEM_ID, buildRequest(), SELLER_ID));
@@ -257,8 +256,7 @@ class ItemServiceTest {
     @Test
     @DisplayName("không được xóa item đang trong phiên đấu giá")
     void cannotDeleteItemInAuction() {
-      when(itemDao.findById(ITEM_ID))
-          .thenReturn(Optional.of(buildItem(SELLER_ID, "IN_AUCTION")));
+      when(itemDao.findById(ITEM_ID)).thenReturn(Optional.of(buildItem(SELLER_ID, "IN_AUCTION")));
 
       assertThrows(IllegalStateException.class, () -> service.delete(ITEM_ID, SELLER_ID, "SELLER"));
       verify(itemDao, never()).delete(anyLong());
