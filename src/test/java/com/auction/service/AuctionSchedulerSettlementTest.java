@@ -154,6 +154,19 @@ class AuctionSchedulerSettlementTest {
   }
 
   @Test
+  @DisplayName("Settlement vô hiệu hóa auto-bid configs còn ACTIVE")
+  void settlementDeactivatesActiveAutoBidConfigs() throws Exception {
+    reserveBidderBalance(new BigDecimal("300000"));
+    Auction auction = createRunningAuction("Auto Bid Cleanup Item", new BigDecimal("300000"));
+    insertActiveAutoBidConfig(auction.getId(), bidder.getId());
+
+    invokeSettleAndClose(auction.getId());
+
+    assertEquals(AuctionStatus.PAID, auctionDao.findById(auction.getId()).orElseThrow().getStatus());
+    assertEquals(0L, activeAutoBidConfigCount(auction.getId()));
+  }
+
+  @Test
   @DisplayName("Scheduler không settle sớm khi bid cuối giờ đã gia hạn anti-snipe")
   void settlingClaimRespectsAntiSnipeExtension() throws Exception {
     LocalDateTime scanNow = LocalDateTime.now();
@@ -231,6 +244,38 @@ class AuctionSchedulerSettlementTest {
               .bind("auctionId", auctionId)
               .execute();
         });
+  }
+
+  private void insertActiveAutoBidConfig(long auctionId, long bidderId) {
+    jdbi.useHandle(
+        handle ->
+            handle
+                .createUpdate(
+                    """
+                    INSERT INTO auto_bid_configs (
+                        auction_id, bidder_id, max_bid, increment_amount, active, status,
+                        registered_at
+                    )
+                    VALUES (:auctionId, :bidderId, 1000, 50, true, 'ACTIVE', NOW())
+                    """)
+                .bind("auctionId", auctionId)
+                .bind("bidderId", bidderId)
+                .execute());
+  }
+
+  private long activeAutoBidConfigCount(long auctionId) {
+    return jdbi.withHandle(
+        handle ->
+            handle
+                .createQuery(
+                    """
+                    SELECT COUNT(*)
+                    FROM auto_bid_configs
+                    WHERE auction_id = :auctionId AND status = 'ACTIVE'
+                    """)
+                .bind("auctionId", auctionId)
+                .mapTo(Long.class)
+                .one());
   }
 
   private void invokeSettleAndClose(Long auctionId) throws Exception {
