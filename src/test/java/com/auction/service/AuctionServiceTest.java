@@ -275,7 +275,8 @@ class AuctionServiceTest {
       CreateAuctionRequest req = new CreateAuctionRequest();
       req.setStartTime(auction.getEndTime().plusMinutes(1));
 
-      assertThrows(IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
+      assertThrows(
+          IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
       verify(auctionDao, never()).update(any(Auction.class));
     }
 
@@ -289,7 +290,8 @@ class AuctionServiceTest {
       CreateAuctionRequest req = new CreateAuctionRequest();
       req.setEndTime(auction.getStartTime().minusMinutes(1));
 
-      assertThrows(IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
+      assertThrows(
+          IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
       verify(auctionDao, never()).update(any(Auction.class));
     }
 
@@ -305,7 +307,8 @@ class AuctionServiceTest {
       req.setStartTime(start);
       req.setEndTime(start);
 
-      assertThrows(IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
+      assertThrows(
+          IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
       verify(auctionDao, never()).update(any(Auction.class));
     }
 
