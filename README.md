@@ -19,37 +19,120 @@
 
 ---
 
-## Submission Links
+## Evaluator First: Required Submission Information
 
-| Item | Link |
+> **Start here when grading.** This section contains the required links, environment, JAR location, and exact Server → Client run order.
+
+| Required item | Value |
 |---|---|
 | GitHub repository | https://github.com/kieran-labs/oop-course-project-uet |
 | Main branch | `main` |
-| Prebuilt JARs | https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0 |
+| Prebuilt JAR release | https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0 |
+| Server JAR | `auction-server-1.0.0.jar` |
+| Client JAR | `auction-client-1.0.0.jar` |
 | Report PDF | `TODO_ADD_REPORT_PDF_LINK` |
 | Demo video | `TODO_ADD_DEMO_VIDEO_LINK` |
 
+> **Before final submission:** replace `TODO_ADD_REPORT_PDF_LINK` and `TODO_ADD_DEMO_VIDEO_LINK` with the actual report PDF and demo video URLs.
+
 ---
 
-## Evaluator Quick Start
+## 1. Problem Description and System Scope
 
-### Requirements
+This project implements an **online auction system** where sellers can list items, create auctions, and bidders can join auctions, place bids, configure auto-bidding, and receive real-time updates. The system is built as a desktop client-server application: a JavaFX client communicates with a Javalin backend through REST APIs and WebSocket channels, while the backend persists data in PostgreSQL.
 
-| Requirement | Version / Note |
+**System scope:**
+
+| Area | Included scope |
 |---|---|
-| Java | JDK **21+** |
-| OS | Windows 10+ / macOS / Linux with desktop display |
-| Port | `8080` must be free |
-| Database | No local PostgreSQL installation required; the server starts embedded PostgreSQL automatically |
+| User management | Register, login, role-based access for `ADMIN`, `SELLER`, and `BIDDER` |
+| Item management | Sellers create, view, edit, and delete their own items by category |
+| Auction management | Sellers create auctions; system manages auction lifecycle and settlement |
+| Bidding | Manual bidding, auto-bidding, bid history, validation, and wallet reservation |
+| Realtime update | WebSocket notifications for bid updates, time extension, auction ending, and balance changes |
+| Admin workflow | Deposit approval/rejection, password-reset approval/rejection, user and auction moderation |
+| Persistence | PostgreSQL schema migration and persistent auction/user/bid/wallet data |
+| Quality | Unit/integration tests, CI, static analysis, coverage, and formatted build pipeline |
 
-### Run release JARs
+---
 
-Download both release JARs into the same folder:
+## 2. Technology, Runtime Environment, and Installation Requirements
 
-- `auction-server-1.0.0.jar`
-- `auction-client-1.0.0.jar`
+| Category | Technology / Requirement |
+|---|---|
+| Language | Java **21** |
+| Client UI | JavaFX + FXML + CSS |
+| Backend | Javalin REST API + WebSocket |
+| Database | Embedded PostgreSQL for local evaluation; PostgreSQL-compatible schema with Flyway migrations |
+| Persistence Access | JDBI |
+| Authentication | JWT + BCrypt password hashing |
+| Build Tool | Gradle Kotlin DSL |
+| Testing / Quality | JUnit 5, Mockito, JaCoCo, Checkstyle, SpotBugs, Spotless, GitHub Actions |
+| Operating System | Windows 10+ / macOS / Linux with a desktop display |
+| Required Port | `8080` must be free before starting the server |
 
-Start the server:
+**Required installation:**
+
+1. Install **JDK 21+**.
+2. Make sure `java` is available in terminal:
+
+```bash
+java -version
+```
+
+3. No separate PostgreSQL installation is required for normal evaluation because the server starts embedded PostgreSQL automatically.
+
+---
+
+## 3. JAR File Location
+
+There are two supported ways to get the executable JARs.
+
+### Option A — Download prebuilt JARs
+
+Download both files from the GitHub release:
+
+```text
+https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0
+```
+
+Required files:
+
+```text
+auction-server-1.0.0.jar
+auction-client-1.0.0.jar
+```
+
+### Option B — Build JARs from source
+
+Run:
+
+```bash
+./gradlew clean buildJars
+```
+
+Windows:
+
+```cmd
+gradlew.bat clean buildJars
+```
+
+Generated JAR paths:
+
+```text
+build/libs/auction-server-1.0.0.jar
+build/libs/auction-client-1.0.0.jar
+```
+
+---
+
+## 4. Important: Run Server and Client in This Exact Order
+
+> **Important:** always start the **Server first**, wait until it is running on port `8080`, then start the **Client**.
+
+### Step 1 — Open Terminal 1 and start the Server
+
+macOS / Linux:
 
 ```bash
 export JWT_SECRET="replace-with-a-random-secret-of-at-least-32-bytes"
@@ -63,36 +146,90 @@ $env:JWT_SECRET = "replace-with-a-random-secret-of-at-least-32-bytes"
 java -jar auction-server-1.0.0.jar
 ```
 
-Start one or more clients:
+Wait until the server finishes startup. The backend listens on:
+
+```text
+http://localhost:8080
+```
+
+### Step 2 — Open Terminal 2 and start the Client
 
 ```bash
 java -jar auction-client-1.0.0.jar
 ```
 
-Default admin account:
+You can open multiple clients to demonstrate realtime bidding.
+
+### Step 3 — Login with the seeded admin account
 
 | Role | Username | Password |
 |---|---|---|
 | Admin | `admin` | `123456` |
 
+### Step 4 — Recommended demo flow
+
+1. Start the server and at least two clients.
+2. Login as admin.
+3. Register one seller and two bidders.
+4. Bidders submit deposit requests.
+5. Admin approves deposits.
+6. Seller creates an item and an auction.
+7. Bidders join the same auction and place bids.
+8. Configure auto-bid for one bidder.
+9. Observe realtime bid updates, chart updates, notifications, and anti-sniping extension.
+
 ---
 
-## Overview
+## 5. Main Project Modules and Directory Structure
 
-This project implements an online auction system with a JavaFX desktop client and a Javalin REST/WebSocket server. The server owns all database access and persists data in PostgreSQL.
+```text
+src/main/java/com/auction
+  ├─ App.java, AdminSeeder.java, ClientApp.java, Launcher.java
+  ├─ config/             # DatabaseConfig, JwtUtil
+  ├─ middleware/         # JwtMiddleware
+  ├─ controller/         # REST controllers + AuctionWebSocketHandler
+  ├─ service/            # business services + AuctionScheduler
+  ├─ dao/                # JDBI DAOs + row mappers
+  ├─ model/              # domain models, records, enums
+  ├─ dto/                # request/response/WebSocket/error contracts
+  ├─ exception/          # custom domain/API exceptions
+  ├─ pattern/            # factory, state, observer, strategy
+  ├─ util/               # REST/WS client, validators, notifications, formatting
+  └─ ui/                 # JavaFX controllers and navigation utilities
 
-Core capabilities:
+src/main/resources
+  ├─ db/migration/       # Flyway database migrations
+  ├─ ui/fxml/            # JavaFX screen layouts
+  ├─ css/                # JavaFX styling
+  ├─ fonts/              # bundled Lexend font files
+  └─ icons/              # UI icons
 
-- Role-based authentication: `ADMIN`, `SELLER`, `BIDDER`
-- Seller item management: create, edit, delete items by category
-- Auction lifecycle: `OPEN → RUNNING → SETTLING → FINISHED / PAID / CANCELED`
-- Manual bidding with integer VND validation
-- Concurrent bidding safety through PostgreSQL row-level locking
-- Real-time bid updates through WebSocket + Observer pattern
-- Auto-bidding with max bid, increment, and FIFO priority
-- Anti-sniping: late bid extends auction time
-- Live bid history chart in the JavaFX auction detail screen
-- Unit/integration tests, Gradle quality gates, and GitHub Actions CI
+docs/
+  ├─ SETUP.md
+  ├─ SCHEMA.md
+  ├─ BUSINESS_RULES.md
+  └─ UML_SOURCE_AUDIT.md
+```
+
+---
+
+## 6. Completed Features
+
+| Feature group | Completed functionality |
+|---|---|
+| Authentication | Register, login, JWT authentication, BCrypt password hashing, role-based authorization |
+| Admin | View users, approve/reject deposits, approve/reject password reset requests, moderate users and auctions |
+| Seller | Create/edit/delete own items, create auctions for own available items, view auction activity |
+| Bidder | Deposit workflow, join auctions, place manual bids, configure/cancel auto-bid, receive realtime updates |
+| Auction lifecycle | `OPEN → RUNNING → SETTLING → FINISHED / PAID / CANCELED`, scheduler-driven transitions, settlement logic |
+| Bidding rules | VND integer validation, highest-bid tracking, wallet reservation, bid history |
+| Concurrency safety | PostgreSQL row-level locking and transactional bid placement |
+| Realtime updates | WebSocket bid updates, time extension updates, auction-ended events, user notifications, balance updates |
+| Advanced bidding | Auto-bid strategy with max bid, increment, active config detection, and chain execution |
+| Anti-sniping | Late bid automatically extends auction end time |
+| JavaFX client | Login/register/profile/admin screens, auction list/detail, bid chart, notifications, custom styling |
+| Persistence | Flyway migrations, PostgreSQL schema, persistent users/items/auctions/bids/wallet records |
+| Quality pipeline | JUnit tests, integration tests, Gradle build, formatting, static checks, coverage, GitHub Actions CI |
 
 ---
 
@@ -136,22 +273,6 @@ flowchart LR
     Services --> Patterns["Design Patterns"]
     Services --> Daos["DAOs"]
     Daos --> Database[("PostgreSQL + Flyway")]
-```
-
-```text
-src/main/java/com/auction
-  ├─ App.java, AdminSeeder.java, ClientApp.java, Launcher.java
-  ├─ config/             # DatabaseConfig, JwtUtil
-  ├─ middleware/         # JwtMiddleware
-  ├─ controller/         # REST controllers + AuctionWebSocketHandler
-  ├─ service/            # business services + AuctionScheduler
-  ├─ dao/                # JDBI DAOs + row mappers
-  ├─ model/              # domain models, records, enums
-  ├─ dto/                # request/response/WebSocket/error contracts
-  ├─ exception/          # custom domain/API exceptions
-  ├─ pattern/            # factory, state, observer, strategy
-  ├─ util/               # REST/WS client, validators, notifications, formatting
-  └─ ui/                 # JavaFX controllers and navigation utilities
 ```
 
 ---
@@ -2099,85 +2220,18 @@ AuctionDetailController
 
 ---
 
-## Features by Role
-
-### Admin
-
-- Login with seeded admin account
-- View users
-- Delete users when safe
-- Approve/reject deposit requests
-- Approve/reject password reset requests
-- Delete or moderate auctions
-
-### Seller
-
-- Register/login as seller
-- Create/edit/delete own items
-- Create auctions for own available items
-- View bid activity and notifications
-
-### Bidder
-
-- Register/login as bidder
-- Submit deposit requests
-- Join running auctions
-- Place manual bids
-- Configure/cancel auto-bid
-- Receive real-time price and notification updates
-
----
-
-## Build From Source
+## Developer Build and Quality Gates
 
 ```bash
 git clone https://github.com/kieran-labs/oop-course-project-uet.git
 cd oop-course-project-uet
-```
-
-Set `JWT_SECRET` before starting the server:
-
-```bash
-export JWT_SECRET="replace-with-a-random-secret-of-at-least-32-bytes"
-```
-
-Windows PowerShell:
-
-```powershell
-$env:JWT_SECRET = "replace-with-a-random-secret-of-at-least-32-bytes"
-```
-
-### Run from source
-
-```bash
-./gradlew run          # server
-./gradlew runClient    # client, in another terminal
-```
-
-Windows:
-
-```cmd
-gradlew.bat run
-gradlew.bat runClient
-```
-
-### Build fat JARs
-
-```bash
 ./gradlew clean buildJars
 ```
 
-Generated files:
-
-- `build/libs/auction-server-1.0.0.jar`
-- `build/libs/auction-client-1.0.0.jar`
-
----
-
-## Quality Gates
-
 | Command | Purpose |
 |---|---|
+| `./gradlew run` | Run the server from source |
+| `./gradlew runClient` | Run the JavaFX client from source |
 | `./gradlew spotlessCheck` | Verify Google Java formatting |
 | `./gradlew test` | Run JUnit 5 / Mockito tests |
 | `./gradlew check` | Run tests, Checkstyle, SpotBugs, and JaCoCo verification |
@@ -2208,22 +2262,6 @@ GitHub Actions runs formatting, tests, static analysis, and coverage verificatio
 | Advanced: Auto-bidding | `AutoBidStrategy`, `AutoBidConfig`, `PriorityQueue` |
 | Advanced: Anti-sniping | Final-30-second extension by 60 seconds |
 | Advanced: Bid chart | JavaFX `AreaChart` updated from WebSocket events |
-
----
-
-## Demo Flow
-
-1. Start the server and at least three clients.
-2. Log in as `admin / 123456`.
-3. Register one seller and two bidders.
-4. Bidders submit deposit requests.
-5. Admin approves deposits and bidders receive real-time user notifications.
-6. Seller creates an item and an auction.
-7. Bidders open the same auction detail screen.
-8. Place alternating bids and observe real-time price/chart updates.
-9. Enable auto-bid for one bidder and trigger the auto-bid chain with another manual bid.
-10. Place a bid near the end time to demonstrate anti-sniping extension.
-11. Let the scheduler close and settle the auction.
 
 ---
 
