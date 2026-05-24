@@ -2,14 +2,19 @@
 
 This audit maps the `src/main/java` source tree to the README class diagrams and separates real source classes from compiler-generated artifacts.
 
+## Audit Basis
+
+This pass used the complete merged source file supplied for review and the current `README.md` on `main`. The goal is not only package-level coverage, but factual agreement between source declarations and the Mermaid UML nodes where the README claims to represent source-level classes.
+
 ## Scope
 
 Included:
 
 - Top-level Java source files under `src/main/java/com/auction`.
 - Source-level nested classes, records, enums, and interfaces that appear as named compiled classes.
+- README Mermaid `classDiagram` declarations and relation endpoints.
 
-Excluded from UML class diagrams unless explicitly needed:
+Excluded from strict UML class coverage:
 
 - `src/test/java` test classes.
 - `build/classes` compiler output.
@@ -17,11 +22,11 @@ Excluded from UML class diagrams unless explicitly needed:
 - `package-info.java`, because it documents a package and is not a runtime/domain class.
 - Gradle/cache/database/generated runtime files such as `.gradle`, `build`, `data/postgres`, and `logs`.
 
-## Top-Level Source Files
+## Top-Level Source-File Coverage
 
-The following top-level source files are represented by the README UML set:
+Top-level source-file coverage remains complete at design level.
 
-| Package | Source files |
+| Package | Source files represented by README UML |
 |---|---|
 | `com.auction` | `AdminSeeder.java`, `App.java`, `ClientApp.java`, `Launcher.java` |
 | `config` | `DatabaseConfig.java`, `JwtUtil.java` |
@@ -40,65 +45,96 @@ The following top-level source files are represented by the README UML set:
 | `ui/util` | `Navigable.java`, `SceneManager.java` |
 | `util` | `BackgroundBidWatcher.java`, `MoneyValidator.java`, `NotificationFormat.java`, `NotificationItem.java`, `NotificationStore.java`, `RestClient.java`, `UserBalanceWatcher.java`, `WebSocketClient.java` |
 
-## Source-Level Nested Types
+## Confirmed Correct High-Level Fixes Already Present
 
-These are not separate `.java` files, but they are real source-level named types and appear as `.class` files after compilation. The README now has a dedicated diagram named **Source-Level Nested Types and Helpers** for them.
+- `InlineAppRoutes` is no longer represented as a real source class in README UML.
+- The architecture flowchart is explicitly labeled as runtime communication/data-flow, not strict Java import graph.
+- `App.java` runtime composition includes direct creation/dependency links to the main DAOs, services, `AutoBidStrategy`, controllers, WebSocket handler, and scheduler.
+- `AuctionStates` consistently lists all six singleton states: `OPEN`, `RUNNING`, `SETTLING`, `FINISHED`, `PAID`, `CANCELED`.
+- `AuctionWebSocketHandler` includes the major public WebSocket/notification methods and representative cleanup/token helpers.
+- `AuctionStateFactory` includes its private constructor.
+- `UserResponse`, `AuctionResponse`, `ErrorResponse`, `PageRequest`, and exception inheritance are corrected at design level.
+- Foreign-key-like model links point to `User`, `Item`, or `Auction` when source stores IDs only.
 
-| Owner source file | Nested type | Kind | README status |
-|---|---|---|---|
-| `AuctionDao.java` | `AuctionMapper` | mapper class | Represented |
-| `AutoBidConfigDao.java` | `AutoBidConfigMapper` | mapper class | Represented |
-| `BidTransactionDao.java` | `BidTransactionMapper` | mapper class | Represented |
-| `BidTransactionDao.java` | `BidHistoryEntry` | public record | Represented |
-| `DepositRequestDao.java` | `DepositRecordMapper` | mapper class | Represented |
-| `ItemDao.java` | `ItemMapper` | mapper class | Represented |
-| `PasswordResetRequestDao.java` | `Mapper` | mapper class | Represented as `PasswordResetMapper` to avoid an ambiguous generic class name in Mermaid |
-| `UserDao.java` | `UserMapper` | mapper class | Represented |
-| `AuctionScheduler.java` | `BalanceChange` | private record | Represented as `SchedulerBalanceChange` to avoid collision/ambiguity |
-| `AuctionScheduler.java` | `UserNotification` | private record | Represented as `SchedulerUserNotification` to avoid collision/ambiguity |
-| `AuctionScheduler.java` | `SettlementResult` | private record | Represented as `SchedulerSettlementResult` to avoid collision/ambiguity |
-| `AutoBidStrategy.java` | `AutoBidExecutor` | nested interface | Represented |
-| `AutoBidStrategy.java` | `InTransactionBidExecutor` | nested interface | Represented |
-| `SceneManager.java` | `ResizeDirection` | private enum | Represented |
-| `AuctionListController.java` | `BalanceDisplay` | private record | Represented |
-| `CreateAuctionController.java` | `GlassDateCell` | private final class | Represented |
-| `CreateAuctionController.java` | `GlassCalendarState` | private static final class | Represented |
+## Residual Factual Mismatches Found in This Strict Pass
 
-## Confirmed README Corrections Applied
+The following are not merely stylistic omissions. They are factual mismatches between the current README Mermaid declarations and the supplied source code.
 
-- `InlineAppRoutes` was removed from the class diagram because it is not a real source class.
-- The architecture flowchart is explicitly labeled as a runtime communication/data-flow view, not a strict Java import graph.
-- `App.java` runtime composition now includes direct creation/dependency links to the main DAOs, services, `AutoBidStrategy`, controllers, WebSocket handler, and scheduler.
-- `AuctionStates` now consistently lists all six singleton states: `OPEN`, `RUNNING`, `SETTLING`, `FINISHED`, `PAID`, `CANCELED`.
-- `AuctionWebSocketHandler` now includes the previously missing public methods `notifyBalanceChange()`, `notifyUser()`, and `getConnectionCount()`, plus representative cleanup/token helpers.
-- `BidTransactionDao` now lists its major query/update methods and is linked to `BidHistoryEntry`.
-- DTO diagrams now include setters for request DTOs and constants/factory methods for `BidUpdateMessage`.
-- `AuctionStateFactory` now includes its private constructor.
-- `UserResponse` uses `availableBalance`, not `reservedBalance`.
-- `AuctionResponse` uses `fromAuction()`, not `from()`.
-- `ErrorResponse` uses `error`, `message`, and `timestamp`, not `code`.
-- `PageRequest` is a `record` with `page`, `size`, `offset()`, and `of()`.
-- Exception inheritance is `AuctionException <|-- ...`; `ErrorResponse` is not directly dependent on exception classes.
-- Foreign-key-like model links now point to `User`, `Item`, or `Auction` when the source stores IDs only.
+| Severity | README location | Current README declaration | Source truth | Required fix |
+|---|---|---|---|---|
+| High | Diagram 7, `BidHistoryEntry` | Declared with flattened fields `id`, `auctionId`, `bidderId`, `bidderUsername`, `amount`, `autoBid`, `createdAt`. | Source declares `public record BidHistoryEntry(BidTransaction transaction, String username)` and exposes shortcut methods such as `getAuctionId()`, `getBidderId()`, `getAmount()`, `isAutoBid()`, `getCreatedAt()`. | Replace fields with `-transaction`, `-username`, then list the shortcut methods. |
+| High | Diagram 7, `BalanceDisplay` | Declared as `-balance`, `-availableBalance`. | Source declares `private record BalanceDisplay(String text, String color)`. | Replace fields with `-text`, `-color`. |
+| High | Diagram 7, `GlassCalendarState` | Declared as `<<record>>` with `visibleMonth`, `selectedDate`. | Source declares `private static final class GlassCalendarState` with `hoveredCell`, `hoverProgress`, `hoverTimeline`, and `refreshAll()`. | Change from record to nested class and replace fields/methods. |
+| Medium | Diagram 7, `GlassDateCell` | Lists only `picker`, `state`, `updateItem()`. | Source also stores `shadow` and has private constructor plus `refreshAppearance()`. | Add `-shadow`, `-GlassDateCell()`, `-refreshAppearance()`. |
+| Medium | Diagram 4, `BidUpdateMessage` constants | Constants are written with private visibility marker `-TYPE_*`. | Source constants are `public static final String TYPE_*`. | Change the six constant markers from `-TYPE_*` to `+TYPE_*`. |
+| Medium | Diagram 2 and 7, `BidHistoryEntry` duplication | `BidHistoryEntry` appears with the same flattened-field shape in service/DAO and nested helper diagrams. | Same source truth as above: the record stores `transaction` and `username`, not flattened fields. | Apply the same correction in both appearances. |
 
-## Residual Strictness Notes
+## Recommended README Patch Snippets
 
-The README class diagrams are now source-grounded and cover the source tree at design level. They are still intentionally not a byte-for-byte AST dump. The remaining differences are presentation choices rather than known factual mismatches:
+### Correct `BidHistoryEntry`
 
-| Area | Reason |
-|---|---|
-| Exhaustive private helper methods | Some very small private helper methods are omitted to keep diagrams readable. |
-| Constructor overloads | Some constructors are not listed when they add little design value. |
-| Full getter/setter sets | DTO/model diagrams list the important fields and representative accessors; not every generated-style accessor is repeated where it would bloat the diagram. |
-| Anonymous `$1`, `$2`, lambda/callback classes | These are compiler/generated implementation artifacts, not design-level source classes. |
-| Renamed nested helper nodes | A few nested classes are renamed in Mermaid, for example `PasswordResetMapper` and `SchedulerBalanceChange`, to avoid ambiguous names while preserving the owner relation. |
+```mermaid
+class BidHistoryEntry {
+    <<record>>
+    -transaction
+    -username
+    +getAuctionId()
+    +getBidderId()
+    +getAmount()
+    +isAutoBid()
+    +getCreatedAt()
+}
+```
+
+### Correct `BalanceDisplay`
+
+```mermaid
+class BalanceDisplay {
+    <<record>>
+    -text
+    -color
+}
+```
+
+### Correct `GlassDateCell` and `GlassCalendarState`
+
+```mermaid
+class GlassDateCell {
+    <<nested class>>
+    -picker
+    -state
+    -shadow
+    -GlassDateCell()
+    +updateItem()
+    -refreshAppearance()
+}
+
+class GlassCalendarState {
+    <<nested class>>
+    -hoveredCell
+    -hoverProgress
+    -hoverTimeline
+    -refreshAll()
+}
+```
+
+### Correct `BidUpdateMessage` constants visibility
+
+```mermaid
+class BidUpdateMessage {
+    +TYPE_BID_UPDATE
+    +TYPE_TIME_EXTENDED
+    +TYPE_AUCTION_ENDED
+    +TYPE_AUTO_BID_TRIGGERED
+    +TYPE_BALANCE_UPDATED
+    +TYPE_USER_NOTIFICATION
+}
+```
 
 ## Current Verdict
 
 - Top-level source-file coverage: **complete**.
-- Source-level nested named type coverage: **complete at design level**.
+- Source-level named nested type coverage: **present but not yet fully accurate** because of the mismatches above.
 - Compiler-generated anonymous classes: **correctly excluded**.
-- Known factual mismatches found in previous passes: **resolved in README**.
-- Remaining gap: **not an error**, but a deliberate choice that the README diagrams are readable UML diagrams, not a fully exhaustive AST/member listing.
-
-For a grading README, this is the safer balance: source-grounded enough to defend 1-1 coverage, but not so huge that GitHub Mermaid becomes unreadable or fails to render.
+- Main residual problem: **README diagram 7 and `BidUpdateMessage` constant visibility need one more patch**.
+- No new missing top-level classes were found in this strict pass.
