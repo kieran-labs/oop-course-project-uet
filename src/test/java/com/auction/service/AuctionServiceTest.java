@@ -261,6 +261,69 @@ class AuctionServiceTest {
     }
   }
 
+  @Nested
+  @DisplayName("Update auction request — time validation")
+  class UpdateAuctionRequestTimeValidation {
+
+    @Test
+    @DisplayName("từ chối khi chỉ cập nhật startTime làm startTime >= endTime hiện tại")
+    void rejectsPartialStartTimeThatBreaksExistingEndTime() {
+      Auction auction = buildAuction("OPEN");
+      when(auctionDao.findById(99L)).thenReturn(Optional.of(auction));
+      when(itemDao.findById(ITEM_ID)).thenReturn(Optional.of(buildItem()));
+
+      CreateAuctionRequest req = new CreateAuctionRequest();
+      req.setStartTime(auction.getEndTime().plusMinutes(1));
+
+      assertThrows(IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
+      verify(auctionDao, never()).update(any(Auction.class));
+    }
+
+    @Test
+    @DisplayName("từ chối khi chỉ cập nhật endTime làm endTime <= startTime hiện tại")
+    void rejectsPartialEndTimeThatBreaksExistingStartTime() {
+      Auction auction = buildAuction("OPEN");
+      when(auctionDao.findById(99L)).thenReturn(Optional.of(auction));
+      when(itemDao.findById(ITEM_ID)).thenReturn(Optional.of(buildItem()));
+
+      CreateAuctionRequest req = new CreateAuctionRequest();
+      req.setEndTime(auction.getStartTime().minusMinutes(1));
+
+      assertThrows(IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
+      verify(auctionDao, never()).update(any(Auction.class));
+    }
+
+    @Test
+    @DisplayName("từ chối khi cập nhật cả startTime và endTime nhưng range vẫn không hợp lệ")
+    void rejectsFullInvalidTimeRange() {
+      Auction auction = buildAuction("OPEN");
+      when(auctionDao.findById(99L)).thenReturn(Optional.of(auction));
+      when(itemDao.findById(ITEM_ID)).thenReturn(Optional.of(buildItem()));
+
+      LocalDateTime start = LocalDateTime.now().plusHours(5);
+      CreateAuctionRequest req = new CreateAuctionRequest();
+      req.setStartTime(start);
+      req.setEndTime(start);
+
+      assertThrows(IllegalArgumentException.class, () -> auctionService.update(99L, req, SELLER_ID));
+      verify(auctionDao, never()).update(any(Auction.class));
+    }
+
+    @Test
+    @DisplayName("cho phép partial update khi final time range vẫn hợp lệ")
+    void allowsPartialUpdateWhenFinalRangeIsValid() {
+      Auction auction = buildAuction("OPEN");
+      when(auctionDao.findById(99L)).thenReturn(Optional.of(auction));
+      when(itemDao.findById(ITEM_ID)).thenReturn(Optional.of(buildItem()));
+
+      CreateAuctionRequest req = new CreateAuctionRequest();
+      req.setEndTime(auction.getEndTime().plusHours(1));
+
+      assertDoesNotThrow(() -> auctionService.update(99L, req, SELLER_ID));
+      verify(auctionDao).update(auction);
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════
   // Nhóm 3: State Pattern — RunningState
   // ═══════════════════════════════════════════════════════════
