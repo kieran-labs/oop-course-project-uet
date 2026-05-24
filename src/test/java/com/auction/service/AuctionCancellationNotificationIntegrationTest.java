@@ -80,12 +80,14 @@ class AuctionCancellationNotificationIntegrationTest {
     long bidderId = insertUser("cancel_bidder", "BIDDER", "bidder@test.com", "1000", "250");
     long itemId = insertItem(sellerId);
     long auctionId = insertRunningAuction(itemId, sellerId, bidderId, "250");
+    insertActiveAutoBidConfig(auctionId, bidderId);
 
     auctionService.delete(auctionId, 999L, "ADMIN");
 
     assertEquals(AuctionStatus.CANCELED.name(), auctionStatus(auctionId));
     assertMoney("0.00", reservedBalance(bidderId));
     assertEquals(1L, cancellationNotificationCount(bidderId, auctionId));
+    assertEquals(0L, activeAutoBidConfigCount(auctionId));
     verify(eventManager).notifyAuctionEnd(eq(auctionId), any(BidUpdateMessage.class));
   }
 
@@ -97,6 +99,7 @@ class AuctionCancellationNotificationIntegrationTest {
         insertUser("rollback_bidder", "BIDDER", "rollback-bidder@test.com", "1000", "0");
     long itemId = insertItem(sellerId);
     long auctionId = insertRunningAuction(itemId, sellerId, bidderId, "250");
+    insertActiveAutoBidConfig(auctionId, bidderId);
 
     assertThrows(
         IllegalStateException.class, () -> auctionService.delete(auctionId, 999L, "ADMIN"));
@@ -104,6 +107,7 @@ class AuctionCancellationNotificationIntegrationTest {
     assertEquals(AuctionStatus.RUNNING.name(), auctionStatus(auctionId));
     assertMoney("0.00", reservedBalance(bidderId));
     assertEquals(0L, cancellationNotificationCount(bidderId, auctionId));
+    assertEquals(1L, activeAutoBidConfigCount(auctionId));
     verify(eventManager, never()).notifyAuctionEnd(eq(auctionId), any(BidUpdateMessage.class));
   }
 
@@ -198,6 +202,23 @@ class AuctionCancellationNotificationIntegrationTest {
                 .one());
   }
 
+  private void insertActiveAutoBidConfig(long auctionId, long bidderId) {
+    jdbi.useHandle(
+        handle ->
+            handle
+                .createUpdate(
+                    """
+                    INSERT INTO auto_bid_configs (
+                        auction_id, bidder_id, max_bid, increment_amount, active, status,
+                        registered_at
+                    )
+                    VALUES (:auctionId, :bidderId, 1000, 50, true, 'ACTIVE', NOW())
+                    """)
+                .bind("auctionId", auctionId)
+                .bind("bidderId", bidderId)
+                .execute());
+  }
+
   private String auctionStatus(long auctionId) {
     return jdbi.withHandle(
         handle ->
@@ -232,6 +253,21 @@ class AuctionCancellationNotificationIntegrationTest {
                     """)
                 .bind("userId", userId)
                 .bind("message", "%#" + auctionId + "%")
+                .mapTo(Long.class)
+                .one());
+  }
+
+  private long activeAutoBidConfigCount(long auctionId) {
+    return jdbi.withHandle(
+        handle ->
+            handle
+                .createQuery(
+                    """
+                    SELECT COUNT(*)
+                    FROM auto_bid_configs
+                    WHERE auction_id = :auctionId AND status = 'ACTIVE'
+                    """)
+                .bind("auctionId", auctionId)
                 .mapTo(Long.class)
                 .one());
   }
