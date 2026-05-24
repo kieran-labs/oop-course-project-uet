@@ -13,7 +13,7 @@
 [![Gradle](https://img.shields.io/badge/Gradle-Kotlin%20DSL-02303A?logo=gradle&logoColor=white)](https://gradle.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
-**[Download v1.0.0 JARs](https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0)** · **[Setup](docs/SETUP.md)** · **[Schema](docs/SCHEMA.md)** · **[CI](https://github.com/kieran-labs/oop-course-project-uet/actions/workflows/ci.yml)**
+**[Download v1.0.0 JARs](https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0)** · **[Setup](docs/SETUP.md)** · **[Schema](docs/SCHEMA.md)** · **[UML Source Audit](docs/UML_SOURCE_AUDIT.md)** · **[CI](https://github.com/kieran-labs/oop-course-project-uet/actions/workflows/ci.yml)**
 
 </div>
 
@@ -110,7 +110,7 @@ Core capabilities:
 
 ## Architecture
 
-The diagrams are intentionally rendered as a **left-to-right tree**: root objects stay on the left, and dependencies branch to the right.
+The architecture flowchart below is a **runtime communication/data-flow view**, not a strict Java import graph. It shows how the JavaFX client talks to server routes and WebSocket endpoints, then how server requests move through controllers, services, DAOs, patterns, and PostgreSQL.
 
 ```mermaid
 flowchart LR
@@ -119,8 +119,10 @@ flowchart LR
     UiControllers --> RestClient["RestClient"]
     UiControllers --> WebSocketClient["WebSocketClient"]
 
-    RestClient --> JwtMiddleware["JwtMiddleware"]
-    WebSocketClient --> WsHandler["AuctionWebSocketHandler"]
+    RestClient --> HttpApi["Javalin HTTP API"]
+    WebSocketClient --> WsApi["Javalin WebSocket API"]
+    HttpApi --> JwtMiddleware["JwtMiddleware"]
+    WsApi --> WsHandler["AuctionWebSocketHandler"]
 
     App["App.java"] --> JwtMiddleware
     App --> Controllers["REST Controllers"]
@@ -171,6 +173,7 @@ Endpoint paths are kept in Markdown tables, not inside Mermaid `classDiagram` bo
 | `pattern` | Factory, State, Observer, and Strategy implementations |
 | `util` | `MoneyValidator`, `NotificationFormat`, `RestClient`, `WebSocketClient`, notification utilities |
 | `ui.controller` / `ui.util` | JavaFX controllers, `SceneManager`, `Navigable` |
+| nested source-level helpers | DAO row mappers, `BidHistoryEntry`, scheduler records, `ResizeDirection`, `BalanceDisplay`, date-picker helper classes |
 
 ### Inline Routes in `App.java`
 
@@ -187,17 +190,18 @@ Endpoint paths are kept in Markdown tables, not inside Mermaid `classDiagram` bo
 
 ### Relationship Audit Notes
 
-- Arrows represent **source-code dependency or stored foreign-key reference** when possible, not only conceptual ownership.
+- Arrows represent **source-code dependency, runtime composition, or stored foreign-key reference** when possible; when a diagram intentionally shows runtime communication, it is labeled as such.
 - Mermaid `classDiagram` creates empty boxes for any relation endpoint that is not declared inside the same diagram block. Therefore every class referenced by a relation below has a local declaration with at least one real field or method.
 - Foreign-key-like fields are drawn toward `User`, `Item`, or `Auction` when the source stores only IDs such as `userId`, `sellerId`, `bidderId`, `itemId`, or `auctionId`.
 - `ErrorResponse` does not import exception classes; exception inheritance is represented through `AuctionException <|-- ...`, while error mapping is handled by `App.java` exception handlers.
 - `AuctionWebSocketHandler` creates/stores `WebSocketObserver`, while `WebSocketObserver` calls `AuctionWebSocketHandler.broadcast(...)`, so the Observer/WebSocket link is intentionally bidirectional.
+- The README diagrams now include the strict source-level nested helper types that appear as named compiled classes. Anonymous compiler-generated classes such as `$1`, `$2`, or lambda callback classes are intentionally excluded.
 
 ---
 
 ## Class Diagrams
 
-### 1. Runtime Composition, Security, and Inline Routes
+### 1. Runtime Composition, Security, and Route Registration
 
 ```mermaid
 classDiagram
@@ -225,20 +229,6 @@ classDiagram
         -registerExceptionHandlers()
     }
 
-    class InlineAppRoutes {
-        +healthRoute()
-        +shutdownRoute()
-        +currentUserRoutes()
-        +depositRoutes()
-        +adminDepositRoutes()
-        +adminPasswordResetRoutes()
-        +adminAuctionRoutes()
-        +adminUserRoutes()
-        +autoBidRoutes()
-        +auctionWebSocketRoute()
-        +userWebSocketRoute()
-    }
-
     class AdminSeeder {
         -userDao
         -DEFAULT_ADMIN_USERNAME
@@ -254,6 +244,8 @@ classDiagram
         -dataSource
         -embeddedPostgres
         -EMBEDDED_DATA_DIR
+        -POSTGRES_PID_FILE
+        -POSTMASTER_PID_FILE
         +create()
         +shutDown()
         -initExternalPostgres()
@@ -261,6 +253,8 @@ classDiagram
         -runMigrations()
         -buildHikariConfig()
         -stopPreviousPostgresIfNeeded()
+        -stopPostgresWithPgCtl()
+        -killPostgresFromPidFile()
         -registerShutdownHook()
     }
 
@@ -343,7 +337,14 @@ classDiagram
         +broadcast()
         +pushUserNotification()
         +notifyBalanceUpdate()
+        +notifyBalanceChange()
+        +notifyUser()
+        +getConnectionCount()
         +saveNotificationToDatabase()
+        -removeConnection()
+        -removeUserConnection()
+        -registerExpiration()
+        -verifyTokenVersion()
     }
 
     class AuctionScheduler {
@@ -367,44 +368,71 @@ classDiagram
 
     class UserService {
         -userDao
+        -depositRequestDao
+        -jdbi
         +register()
         +login()
         +findById()
+        +approveDeposit()
     }
 
     class PasswordResetService {
+        -userDao
         -resetDao
+        -jdbi
         +requestReset()
         +approveReset()
+        +rejectReset()
     }
 
     class ItemService {
         -itemDao
         +create()
         +getById()
+        +update()
+        +delete()
     }
 
     class AuctionService {
         -auctionDao
+        -itemDao
+        -userDao
+        -bidTransactionDao
+        -wsHandler
         +create()
         +getState()
+        +hardDelete()
     }
 
     class BidService {
         -auctionDao
+        -bidTransactionDao
+        -autoBidConfigDao
+        -autoBidStrategy
+        -wsHandler
         +placeBid()
         +createAutoBid()
+        +getBidHistory()
     }
 
     class NotificationService {
         -notificationDao
         +getRecentNotifications()
+        +markRead()
+        +markAllRead()
     }
 
     class UserDao {
         -jdbi
         +findById()
         +findByIdForUpdate()
+        +findByUsername()
+    }
+
+    class ItemDao {
+        -jdbi
+        +findByIdForUpdate()
+        +updateStatusInTransaction()
     }
 
     class AuctionDao {
@@ -413,10 +441,45 @@ classDiagram
         +atomicTransition()
     }
 
-    class ItemDao {
+    class BidTransactionDao {
         -jdbi
+        +insert()
+        +findByAuctionId()
+        +findWithUsernames()
+    }
+
+    class AutoBidConfigDao {
+        -jdbi
+        +findByAuctionAndBidder()
+        +hasActiveConfig()
+        +update()
+    }
+
+    class DepositRequestDao {
+        -jdbi
+        +findByUserId()
         +findByIdForUpdate()
-        +updateStatusInTransaction()
+        +transitionStatusInTransaction()
+    }
+
+    class PasswordResetRequestDao {
+        -jdbi
+        +findByStatus()
+        +hasPendingRequest()
+        +transitionStatusInTransaction()
+    }
+
+    class NotificationDao {
+        -jdbi
+        +findRecentByUserId()
+        +markRead()
+    }
+
+    class AutoBidStrategy {
+        -autoBidConfigDao
+        -userDao
+        +executeAll()
+        +executeAllInTransaction()
     }
 
     class AuctionEventManager {
@@ -430,6 +493,8 @@ classDiagram
         -handler
         -auctionId
         +onBidUpdate()
+        +onTimeExtended()
+        +onAuctionEnd()
         +getAuctionId()
     }
 
@@ -437,14 +502,29 @@ classDiagram
     App --> JwtUtil
     App --> JwtMiddleware
     App --> AdminSeeder
-    App --> InlineAppRoutes
+    App --> UserDao
+    App --> ItemDao
+    App --> AuctionDao
+    App --> BidTransactionDao
+    App --> AutoBidConfigDao
+    App --> DepositRequestDao
+    App --> PasswordResetRequestDao
+    App --> NotificationDao
+    App --> AuctionEventManager
+    App --> AuctionWebSocketHandler
+    App --> UserService
+    App --> PasswordResetService
+    App --> ItemService
+    App --> AuctionService
+    App --> BidService
+    App --> NotificationService
+    App --> AutoBidStrategy
+    App --> AuctionScheduler
     App --> AuthController
     App --> ItemController
     App --> AuctionController
     App --> BidController
     App --> NotificationController
-    App --> AuctionWebSocketHandler
-    App --> AuctionScheduler
     AuthController --> UserService
     AuthController --> PasswordResetService
     ItemController --> ItemService
@@ -488,6 +568,9 @@ classDiagram
     }
 
     class PasswordResetService {
+        -RESET_PASSWORD_CHARS
+        -RESET_PASSWORD_LENGTH
+        -SECURE_RANDOM
         -userDao
         -resetDao
         -jdbi
@@ -510,6 +593,7 @@ classDiagram
     }
 
     class AuctionService {
+        -LOGGER
         -auctionDao
         -itemDao
         -userDao
@@ -517,19 +601,27 @@ classDiagram
         -jdbi
         -bidTransactionDao
         -wsHandler
+        +getAllAuctions()
         +getAll()
         +getById()
         +getAuctionById()
         +create()
+        +update()
         +delete()
         +hardDelete()
         +getState()
         -createInTransaction()
         -validateItemCanBeAuctioned()
+        -validateItemCanBeAuctionedInTransaction()
         -enrichAuctionResponse()
+        -persistCanceledAuction()
+        -emitCancellationIfNeeded()
     }
 
     class BidService {
+        -LOGGER
+        -ANTI_SNIPE_THRESHOLD_MS
+        -ANTI_SNIPE_EXTENSION_SECONDS
         -auctionDao
         -bidTransactionDao
         -autoBidConfigDao
@@ -567,6 +659,7 @@ classDiagram
         +findAll()
         +update()
         +delete()
+        +hasDeleteBlockingReferences()
         +updateReservedBalanceInTransaction()
         +releaseReservedBalanceInTransaction()
     }
@@ -590,6 +683,7 @@ classDiagram
         +insertInTransaction()
         +findById()
         +findByIdForUpdate()
+        +findByIdForUpdateOptional()
         +findAll()
         +findByStatus()
         +existsById()
@@ -600,12 +694,33 @@ classDiagram
         +atomicTransition()
         +findDueAuctionIds()
         +findExpiredAuctionIds()
+        +hardDelete()
+        +hardDeleteInTransaction()
     }
 
     class BidTransactionDao {
         -jdbi
         +insert()
+        +insert(handle)
         +findByAuctionId()
+        +findByBidderId()
+        +findById()
+        +findLastBid()
+        +findWithUsernames()
+        +countByAuctionId()
+        +getHighestPrice()
+        +deleteByAuctionId()
+    }
+
+    class BidHistoryEntry {
+        <<record>>
+        -id
+        -auctionId
+        -bidderId
+        -bidderUsername
+        -amount
+        -autoBid
+        -createdAt
     }
 
     class AutoBidConfigDao {
@@ -615,6 +730,7 @@ classDiagram
         +findByAuctionAndBidder()
         +findActiveByAuctionId()
         +hasActiveConfig()
+        +upsertInTransaction()
         +update()
     }
 
@@ -655,9 +771,15 @@ classDiagram
         -parseYear()
     }
 
+    class UserFactory {
+        -UserFactory()
+        +create()
+    }
+
     class AuctionEventManager {
         -listeners
         +notifyBidUpdate()
+        +notifyTimeExtended()
         +notifyAuctionEnd()
     }
 
@@ -665,23 +787,35 @@ classDiagram
         -connections
         +broadcast()
         +pushUserNotification()
+        +notifyBalanceChange()
     }
 
     class AuctionStates {
         -AuctionStates()
         +OPEN
         +RUNNING
+        +SETTLING
         +FINISHED
+        +PAID
+        +CANCELED
     }
 
     class MoneyValidator {
         +requirePositiveIntegerVnd()
         +isIntegerVnd()
+        +toIntegerVndExact()
     }
 
     class NotificationFormat {
+        +USER_OPEN
+        +USER_CLOSE
         +user()
         +auctionName()
+    }
+
+    class JwtUtil {
+        +createToken()
+        +verifyToken()
     }
 
     class AutoBidStrategy {
@@ -691,8 +825,49 @@ classDiagram
         +executeAllInTransaction()
     }
 
+    class AuctionResponse {
+        +fromAuction()
+    }
+
+    class CreateAuctionRequest {
+        -itemId
+        -startingPrice
+        -startTime
+        -endTime
+    }
+
+    class PageRequest {
+        <<record>>
+        +offset()
+        +of()
+    }
+
+    class BidUpdateMessage {
+        +bidUpdate()
+        +timeExtended()
+        +auctionEnded()
+    }
+
+    class Art {
+        -artist
+        +getCategory()
+    }
+
+    class Electronics {
+        -brand
+        +getCategory()
+    }
+
+    class Vehicle {
+        -year
+        +getCategory()
+    }
+
     UserService --> UserDao
     UserService --> DepositRequestDao
+    UserService --> JwtUtil
+    UserService --> UserFactory
+    UserService --> MoneyValidator
     UserService ..> WalletTransactionDao
     PasswordResetService --> UserDao
     PasswordResetService --> PasswordResetRequestDao
@@ -708,8 +883,16 @@ classDiagram
     AuctionService --> AuctionStates
     AuctionService --> MoneyValidator
     AuctionService --> NotificationFormat
+    AuctionService --> AuctionResponse
+    AuctionService --> CreateAuctionRequest
+    AuctionService --> PageRequest
+    AuctionService --> BidUpdateMessage
+    AuctionService --> Art
+    AuctionService --> Electronics
+    AuctionService --> Vehicle
     BidService --> AuctionDao
     BidService --> BidTransactionDao
+    BidTransactionDao --> BidHistoryEntry
     BidService --> AutoBidConfigDao
     BidService --> UserDao
     BidService --> AuctionService
@@ -717,6 +900,8 @@ classDiagram
     BidService --> AuctionEventManager
     BidService --> AuctionWebSocketHandler
     BidService --> MoneyValidator
+    BidService --> NotificationFormat
+    BidService --> BidUpdateMessage
     BidService ..> WalletTransactionDao
     NotificationService --> NotificationDao
 ```
@@ -734,6 +919,7 @@ classDiagram
         +getId()
         +setId()
         +getCreatedAt()
+        +setCreatedAt()
         +equals()
         +hashCode()
     }
@@ -749,8 +935,15 @@ classDiagram
         +getRole()
         +getAvailableBalance()
         +getUsername()
+        +setUsername()
+        +getPasswordHash()
+        +setPasswordHash()
+        +getEmail()
+        +setEmail()
         +getBalance()
         +setBalance()
+        +getReservedBalance()
+        +setReservedBalance()
         +getTokenVersion()
         +setTokenVersion()
     }
@@ -775,8 +968,11 @@ classDiagram
         -status
         +getCategory()
         +getName()
+        +setName()
         +getDescription()
+        +setDescription()
         +getSellerId()
+        +setSellerId()
         +getStatus()
         +setStatus()
     }
@@ -785,18 +981,21 @@ classDiagram
         -brand
         +getCategory()
         +getBrand()
+        +setBrand()
     }
 
     class Art {
         -artist
         +getCategory()
         +getArtist()
+        +setArtist()
     }
 
     class Vehicle {
         -year
         +getCategory()
         +getYear()
+        +setYear()
     }
 
     class Auction {
@@ -814,6 +1013,10 @@ classDiagram
         +getRemainingTimeMs()
         +getCurrentPrice()
         +setCurrentPrice()
+        +getStartingPrice()
+        +setStartingPrice()
+        +getLeadingBidderId()
+        +setLeadingBidderId()
         +setStatus()
         +setUpdatedAt()
     }
@@ -825,10 +1028,15 @@ classDiagram
         -autoBid
         -bidderUsername
         +getAuctionId()
+        +setAuctionId()
         +getBidderId()
+        +setBidderId()
         +getAmount()
+        +setAmount()
         +isAutoBid()
+        +setAutoBid()
         +getBidderUsername()
+        +setBidderUsername()
     }
 
     class AutoBidConfig {
@@ -856,6 +1064,7 @@ classDiagram
         -createdAt
         -reviewedAt
         +getUserId()
+        +getUsername()
         +getAmount()
         +getStatus()
         +setStatus()
@@ -870,6 +1079,7 @@ classDiagram
         -createdAt
         -reviewedAt
         +getUserId()
+        +getUsername()
         +getEmail()
         +getStatus()
         +setStatus()
@@ -951,14 +1161,19 @@ classDiagram
         -password
         -role
         +getUsername()
+        +setUsername()
         +getEmail()
+        +setEmail()
         +getPassword()
+        +setPassword()
         +getRole()
+        +setRole()
     }
 
     class ForgotPasswordRequest {
         -email
         +getEmail()
+        +setEmail()
     }
 
     class ChangePasswordRequest {
@@ -973,6 +1188,7 @@ classDiagram
     class DepositRequest {
         -amount
         +getAmount()
+        +setAmount()
     }
 
     class CreateItemRequest {
@@ -981,9 +1197,13 @@ classDiagram
         -category
         -categoryDetail
         +getName()
+        +setName()
         +getDescription()
+        +setDescription()
         +getCategory()
+        +setCategory()
         +getCategoryDetail()
+        +setCategoryDetail()
     }
 
     class CreateAuctionRequest {
@@ -992,21 +1212,28 @@ classDiagram
         -startTime
         -endTime
         +getItemId()
+        +setItemId()
         +getStartingPrice()
+        +setStartingPrice()
         +getStartTime()
+        +setStartTime()
         +getEndTime()
+        +setEndTime()
     }
 
     class BidRequest {
         -amount
         +getAmount()
+        +setAmount()
     }
 
     class AutoBidRequest {
         -maxBid
         -increment
         +getMaxBid()
+        +setMaxBid()
         +getIncrement()
+        +setIncrement()
     }
 
     class PageRequest {
@@ -1026,6 +1253,9 @@ classDiagram
         -availableBalance
         -createdAt
         +from()
+        +getId()
+        +getBalance()
+        +getAvailableBalance()
     }
 
     class AuctionResponse {
@@ -1058,6 +1288,12 @@ classDiagram
     }
 
     class BidUpdateMessage {
+        -TYPE_BID_UPDATE
+        -TYPE_TIME_EXTENDED
+        -TYPE_AUCTION_ENDED
+        -TYPE_AUTO_BID_TRIGGERED
+        -TYPE_BALANCE_UPDATED
+        -TYPE_USER_NOTIFICATION
         -type
         -auctionId
         -currentPrice
@@ -1076,6 +1312,10 @@ classDiagram
         +balanceUpdated()
         +balanceChanged()
         +userNotification()
+        +getType()
+        +setType()
+        +getAuctionId()
+        +setAuctionId()
     }
 
     class User {
@@ -1125,6 +1365,7 @@ classDiagram
 
     UserResponse --> User
     AuctionResponse --> Auction
+    BidUpdateMessage --> Auction
     AuctionException <|-- InvalidBidException
     AuctionException <|-- AuctionClosedException
     AuctionException <|-- UnauthorizedException
@@ -1150,6 +1391,7 @@ classDiagram
     }
 
     class AuctionStateFactory {
+        -AuctionStateFactory()
         +create()
     }
 
@@ -1633,6 +1875,199 @@ classDiagram
     Navigable <|.. DepositController
     Navigable <|.. ChangePasswordController
     Navigable <|.. AdminPanelController
+```
+
+### 7. Source-Level Nested Types and Helpers
+
+```mermaid
+classDiagram
+    direction LR
+
+    class AuctionDao {
+        +findById()
+        +findByIdForUpdate()
+    }
+
+    class AuctionMapper {
+        <<mapper>>
+        +map()
+    }
+
+    class AutoBidConfigDao {
+        +findActiveByAuctionId()
+        +upsertInTransaction()
+    }
+
+    class AutoBidConfigMapper {
+        <<mapper>>
+        +map()
+    }
+
+    class BidTransactionDao {
+        +findWithUsernames()
+        +findByAuctionId()
+    }
+
+    class BidTransactionMapper {
+        <<mapper>>
+        +map()
+    }
+
+    class BidHistoryEntry {
+        <<record>>
+        -id
+        -auctionId
+        -bidderId
+        -bidderUsername
+        -amount
+        -autoBid
+        -createdAt
+    }
+
+    class DepositRequestDao {
+        +findByIdForUpdate()
+    }
+
+    class DepositRecordMapper {
+        <<mapper>>
+        +map()
+    }
+
+    class ItemDao {
+        +findById()
+    }
+
+    class ItemMapper {
+        <<mapper>>
+        +map()
+    }
+
+    class PasswordResetRequestDao {
+        +findByIdForUpdate()
+    }
+
+    class PasswordResetMapper {
+        <<mapper>>
+        +map()
+    }
+
+    class UserDao {
+        +findById()
+        +findByUsername()
+    }
+
+    class UserMapper {
+        <<mapper>>
+        +map()
+    }
+
+    class AuctionScheduler {
+        -settleAndClose()
+    }
+
+    class SchedulerBalanceChange {
+        <<record>>
+        -userId
+        -newBalance
+        -delta
+        -message
+        -notificationType
+    }
+
+    class SchedulerUserNotification {
+        <<record>>
+        -userId
+        -message
+        -notificationType
+    }
+
+    class SchedulerSettlementResult {
+        <<record>>
+        -auction
+        -userNotifications
+        -balanceChanges
+    }
+
+    class AutoBidStrategy {
+        +executeAll()
+        +executeAllInTransaction()
+    }
+
+    class AutoBidExecutor {
+        <<interface>>
+        +execute()
+    }
+
+    class InTransactionBidExecutor {
+        <<interface>>
+        +execute()
+    }
+
+    class SceneManager {
+        +init()
+        +navigateTo()
+    }
+
+    class ResizeDirection {
+        <<enum>>
+        NONE
+        NORTH
+        SOUTH
+        EAST
+        WEST
+        NORTH_EAST
+        NORTH_WEST
+        SOUTH_EAST
+        SOUTH_WEST
+    }
+
+    class AuctionListController {
+        -loadCurrentBalance()
+    }
+
+    class BalanceDisplay {
+        <<record>>
+        -balance
+        -availableBalance
+    }
+
+    class CreateAuctionController {
+        -configureDatePickerGlassPopup()
+    }
+
+    class GlassDateCell {
+        <<nested class>>
+        -picker
+        -state
+        +updateItem()
+    }
+
+    class GlassCalendarState {
+        <<record>>
+        -visibleMonth
+        -selectedDate
+    }
+
+    AuctionDao *-- AuctionMapper
+    AutoBidConfigDao *-- AutoBidConfigMapper
+    BidTransactionDao *-- BidTransactionMapper
+    BidTransactionDao *-- BidHistoryEntry
+    DepositRequestDao *-- DepositRecordMapper
+    ItemDao *-- ItemMapper
+    PasswordResetRequestDao *-- PasswordResetMapper
+    UserDao *-- UserMapper
+    AuctionScheduler *-- SchedulerBalanceChange
+    AuctionScheduler *-- SchedulerUserNotification
+    AuctionScheduler *-- SchedulerSettlementResult
+    SchedulerSettlementResult --> SchedulerUserNotification
+    SchedulerSettlementResult --> SchedulerBalanceChange
+    AutoBidStrategy *-- AutoBidExecutor
+    AutoBidStrategy *-- InTransactionBidExecutor
+    SceneManager *-- ResizeDirection
+    AuctionListController *-- BalanceDisplay
+    CreateAuctionController *-- GlassDateCell
+    CreateAuctionController *-- GlassCalendarState
+    GlassDateCell --> GlassCalendarState
 ```
 
 ---
