@@ -184,6 +184,7 @@ public class UserService {
 
   /**
    * Đổi mật khẩu — xác minh mật khẩu cũ trước khi cập nhật.
+   *
    * @param userId ID người dùng lấy từ JWT
    * @param req request chứa {@code currentPassword} và {@code newPassword}
    * @throws NotFoundException nếu user không tồn tại
