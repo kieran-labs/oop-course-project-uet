@@ -15,12 +15,14 @@ import java.util.List;
 import java.util.Optional;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.statement.Update;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Answers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -44,6 +46,9 @@ class PasswordResetServiceTest {
 
   @Mock(answer = Answers.RETURNS_DEEP_STUBS)
   private Handle handle;
+
+  @Mock(answer = Answers.RETURNS_SELF)
+  private Update update;
 
   private PasswordResetService service;
 
@@ -72,6 +77,8 @@ class PasswordResetServiceTest {
             })
         .when(jdbi)
         .useTransaction(any());
+
+    when(handle.createUpdate(any(String.class))).thenReturn(update);
   }
 
   private User buildUser() {
@@ -214,6 +221,24 @@ class PasswordResetServiceTest {
       // Verify the returned temp password is a valid BCrypt-hashable string
       assertNotNull(tempPassword);
       assertFalse(tempPassword.isBlank());
+    }
+
+    @Test
+    @DisplayName("tăng token_version khi admin reset mật khẩu")
+    void incrementsTokenVersionWhenPasswordIsReset() {
+      PasswordResetRecord record = new PasswordResetRecord(USER_ID);
+      record.setId(10L);
+      record.setStatus("PENDING");
+      when(resetDao.findByIdForUpdate(handle, 10L)).thenReturn(Optional.of(record));
+      ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+
+      service.approveReset(10L);
+
+      verify(handle).createUpdate(sqlCaptor.capture());
+      String sql = sqlCaptor.getValue();
+      assertTrue(sql.contains("password_hash"));
+      assertTrue(sql.contains("token_version = token_version + 1"));
+      verify(update).bind("id", USER_ID);
     }
 
     @Test
