@@ -162,7 +162,8 @@ class AuctionSchedulerSettlementTest {
 
     invokeSettleAndClose(auction.getId());
 
-    assertEquals(AuctionStatus.PAID, auctionDao.findById(auction.getId()).orElseThrow().getStatus());
+    assertEquals(
+        AuctionStatus.PAID, auctionDao.findById(auction.getId()).orElseThrow().getStatus());
     assertEquals(0L, activeAutoBidConfigCount(auction.getId()));
   }
 
