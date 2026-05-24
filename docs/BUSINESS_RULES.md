@@ -57,6 +57,20 @@ Seeded admin behavior:
 
 Item status values: `AVAILABLE`, `IN_AUCTION`, `SOLD`, `REMOVED`.
 
+Item lifecycle synchronization:
+
+| Event | Item status after event |
+|---|---|
+| Auction is created successfully | `IN_AUCTION` |
+| Auction is paid successfully | `SOLD` |
+| Auction finishes with no bids | `AVAILABLE` |
+| Auction settlement fails because winner cannot pay | `AVAILABLE` |
+| Auction is soft-cancelled before completion | `AVAILABLE` |
+| Admin hard-deletes an unpaid/cancelled auction | `AVAILABLE` |
+| Admin hard-deletes a paid auction | `SOLD` |
+
+This prevents stale `IN_AUCTION` items from blocking future valid auctions after cancellation or failed settlement.
+
 ---
 
 ## 4. Auction Lifecycle
@@ -91,7 +105,8 @@ Cancel/delete rules:
 - Seller cannot cancel a `RUNNING` auction.
 - Admin can soft-cancel `OPEN` or `RUNNING` auctions.
 - If a running auction with a leader is cancelled, the leader reservation is released and `CANCEL_RELEASE` is recorded in the wallet ledger.
-- Admin hard-delete removes dependent wallet, auto-bid, and bid rows before deleting the auction row.
+- Soft-cancelled auctions restore their item to `AVAILABLE`.
+- Admin hard-delete removes dependent wallet, auto-bid, and bid rows before deleting the auction row, while keeping item status consistent with the auction outcome.
 
 ---
 
@@ -206,7 +221,7 @@ Ledger intent:
 
 - Money movements are auditable through append-only rows.
 - `reserved_balance` prevents one wallet from overcommitting to multiple leading bids.
-- Transactional service code keeps wallet, auction, and notification changes consistent.
+- Transactional service code keeps wallet, auction, item status, and notification changes consistent.
 
 ---
 
@@ -239,12 +254,10 @@ This is an admin-reviewed classroom flow. Production should replace it with secu
 The scheduler processes expired `RUNNING` auctions:
 
 1. Claim a due auction by moving `RUNNING` to `SETTLING` atomically.
-2. If there is no leading bidder, mark the auction `FINISHED`.
-3. If the winner can pay, record winner consumption, record seller payout, and mark the auction `PAID`.
-4. If the winner cannot pay, release the reservation and mark the auction `FINISHED`.
+2. If there is no leading bidder, mark the auction `FINISHED` and restore the item to `AVAILABLE`.
+3. If the winner can pay, record winner consumption, record seller payout, mark the auction `PAID`, and mark the item `SOLD`.
+4. If the winner cannot pay, release the reservation, mark the auction `FINISHED`, and restore the item to `AVAILABLE`.
 5. Insert result notifications in the same transaction and push realtime messages after commit.
-
-This documentation intentionally does not claim that settlement marks the item `SOLD`, because the current source path marks the auction paid/finished and records wallet movements; item status handling must be verified separately before documenting it as settlement behavior.
 
 ---
 
