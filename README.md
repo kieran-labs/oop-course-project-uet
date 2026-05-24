@@ -13,27 +13,42 @@
 [![Gradle](https://img.shields.io/badge/Gradle-Kotlin%20DSL-02303A?logo=gradle&logoColor=white)](https://gradle.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
-**[Download v1.0.0 JARs](https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0)** · **[Setup](docs/SETUP.md)** · **[Schema](docs/SCHEMA.md)** · **[UML Source Audit](docs/UML_SOURCE_AUDIT.md)** · **[CI](https://github.com/kieran-labs/oop-course-project-uet/actions/workflows/ci.yml)**
+[![Download Server JAR](https://img.shields.io/badge/Download-Server%20JAR-0969DA?style=for-the-badge&logo=openjdk&logoColor=white)](https://github.com/kieran-labs/oop-course-project-uet/releases/download/v1.0.0/auction-server-1.0.0.jar)
+[![Download Client JAR](https://img.shields.io/badge/Download-Client%20JAR-2EA44F?style=for-the-badge&logo=openjdk&logoColor=white)](https://github.com/kieran-labs/oop-course-project-uet/releases/download/v1.0.0/auction-client-1.0.0.jar)
+
+![Run Order](https://img.shields.io/badge/Run%20Order-Server%20%E2%86%92%20Client-FFB000?style=for-the-badge)
+![Default Port](https://img.shields.io/badge/Port-8080-6F42C1?style=for-the-badge)
+
+**[Release v1.0.0](https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0)** · **[Setup](docs/SETUP.md)** · **[Schema](docs/SCHEMA.md)** · **[UML Source Audit](docs/UML_SOURCE_AUDIT.md)** · **[CI](https://github.com/kieran-labs/oop-course-project-uet/actions/workflows/ci.yml)**
 
 </div>
 
 ---
 
-## Evaluator First: Required Submission Information
+## 🚀 Evaluator First: Required Submission Information
 
-> **Start here when grading.** This section contains the required links, environment, JAR location, and exact Server → Client run order.
+> [!IMPORTANT]
+> **Please start here when grading.** This section contains the repository link, direct JAR downloads, runtime environment, and the exact **Server → Client** execution order.
 
 | Required item | Value |
 |---|---|
-| GitHub repository | https://github.com/kieran-labs/oop-course-project-uet |
-| Main branch | `main` |
-| Prebuilt JAR release | https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0 |
-| Server JAR | `auction-server-1.0.0.jar` |
-| Client JAR | `auction-client-1.0.0.jar` |
-| Report PDF | `TODO_ADD_REPORT_PDF_LINK` |
-| Demo video | `TODO_ADD_DEMO_VIDEO_LINK` |
+| **GitHub repository** | https://github.com/kieran-labs/oop-course-project-uet |
+| **Main branch** | `main` |
+| **Release page** | https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0 |
+| **Server JAR** | [Download `auction-server-1.0.0.jar`](https://github.com/kieran-labs/oop-course-project-uet/releases/download/v1.0.0/auction-server-1.0.0.jar) |
+| **Client JAR** | [Download `auction-client-1.0.0.jar`](https://github.com/kieran-labs/oop-course-project-uet/releases/download/v1.0.0/auction-client-1.0.0.jar) |
+| **Report PDF** | `TODO_ADD_REPORT_PDF_LINK` |
+| **Demo video** | `TODO_ADD_DEMO_VIDEO_LINK` |
 
-> **Before final submission:** replace `TODO_ADD_REPORT_PDF_LINK` and `TODO_ADD_DEMO_VIDEO_LINK` with the actual report PDF and demo video URLs.
+### ⚡ Quick Download
+
+| Server | Client |
+|:---:|:---:|
+| [![Download Server JAR](https://img.shields.io/badge/Download-Server%20JAR-0969DA?style=for-the-badge&logo=openjdk&logoColor=white)](https://github.com/kieran-labs/oop-course-project-uet/releases/download/v1.0.0/auction-server-1.0.0.jar) | [![Download Client JAR](https://img.shields.io/badge/Download-Client%20JAR-2EA44F?style=for-the-badge&logo=openjdk&logoColor=white)](https://github.com/kieran-labs/oop-course-project-uet/releases/download/v1.0.0/auction-client-1.0.0.jar) |
+| `auction-server-1.0.0.jar` | `auction-client-1.0.0.jar` |
+
+> [!WARNING]
+> Before final submission, replace `TODO_ADD_REPORT_PDF_LINK` and `TODO_ADD_DEMO_VIDEO_LINK` with the actual report PDF and demo video URLs.
 
 ---
 
@@ -86,11 +101,17 @@ java -version
 
 ## 3. JAR File Location
 
-There are two supported ways to get the executable JARs.
+> [!TIP]
+> For grading, the fastest route is to download the two release JARs directly and run **Server first**, then **Client**.
 
 ### Option A — Download prebuilt JARs
 
-Download both files from the GitHub release:
+| JAR | Direct download |
+|---|---|
+| **Server JAR** | [Download `auction-server-1.0.0.jar`](https://github.com/kieran-labs/oop-course-project-uet/releases/download/v1.0.0/auction-server-1.0.0.jar) |
+| **Client JAR** | [Download `auction-client-1.0.0.jar`](https://github.com/kieran-labs/oop-course-project-uet/releases/download/v1.0.0/auction-client-1.0.0.jar) |
+
+Release page:
 
 ```text
 https://github.com/kieran-labs/oop-course-project-uet/releases/tag/v1.0.0
@@ -126,9 +147,10 @@ build/libs/auction-client-1.0.0.jar
 
 ---
 
-## 4. Important: Run Server and Client in This Exact Order
+## 🔥 4. Important: Run Server and Client in This Exact Order
 
-> **Important:** always start the **Server first**, wait until it is running on port `8080`, then start the **Client**.
+> [!IMPORTANT]
+> Always start the **Server first**, wait until it is fully running on port `8080`, and **only then** start the **Client**.
 
 ### Step 1 — Open Terminal 1 and start the Server
 
