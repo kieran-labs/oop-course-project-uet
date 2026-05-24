@@ -159,6 +159,12 @@ auction-client-1.0.0.jar
 $env:JWT_SECRET='auction-demo-secret-1234567890-abcdef-32bytes'; java -jar .\auction-server-1.0.0.jar
 ```
 
+#### Windows Command Prompt / CMD
+
+```cmd
+set "JWT_SECRET=auction-demo-secret-1234567890-abcdef-32bytes" && java -jar .\auction-server-1.0.0.jar
+```
+
 #### macOS / Linux
 
 ```bash
@@ -179,6 +185,12 @@ http://localhost:8080
 #### Windows PowerShell
 
 ```powershell
+java -jar .\auction-client-1.0.0.jar
+```
+
+#### Windows Command Prompt / CMD
+
+```cmd
 java -jar .\auction-client-1.0.0.jar
 ```
 
