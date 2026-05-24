@@ -251,6 +251,12 @@ public class AuctionService {
       throw new UnauthorizedException("You can only edit your own auctions");
     }
 
+    java.time.LocalDateTime candidateStartTime =
+        request.getStartTime() != null ? request.getStartTime() : auction.getStartTime();
+    java.time.LocalDateTime candidateEndTime =
+        request.getEndTime() != null ? request.getEndTime() : auction.getEndTime();
+    validateAuctionTimeRange(candidateStartTime, candidateEndTime);
+
     if (request.getStartingPrice() != null) {
       MoneyValidator.requirePositiveIntegerVnd(request.getStartingPrice(), "Starting price");
       auction.setStartingPrice(request.getStartingPrice());
@@ -266,6 +272,16 @@ public class AuctionService {
     auctionDao.update(auction);
     LOGGER.info("Auction updated: id={}", auctionId);
     return enrichAuctionResponse(auction);
+  }
+
+  private void validateAuctionTimeRange(
+      java.time.LocalDateTime startTime, java.time.LocalDateTime endTime) {
+    if (startTime == null || endTime == null) {
+      throw new IllegalArgumentException("Start time and end time are required");
+    }
+    if (!endTime.isAfter(startTime)) {
+      throw new IllegalArgumentException("End time must be after start time");
+    }
   }
 
   public void delete(Long auctionId, Long userId, String role) {
