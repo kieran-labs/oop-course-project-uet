@@ -76,7 +76,8 @@ import org.slf4j.LoggerFactory;
  * <p>Biến môi trường:
  *
  * <ul>
- *   <li>Database luôn dùng Embedded PostgreSQL và lưu tại {@code data/postgres}; không cần DB_URL.
+ *   <li>Database mặc định dùng Embedded PostgreSQL tại {@code data/postgres}; nếu cấu hình
+ *       {@code DB_URL}, {@code DB_USER}, {@code DB_PASSWORD} thì có thể dùng PostgreSQL ngoài.
  *   <li>JWT_SECRET — required JWT signing key; must be at least 32 bytes in UTF-8.
  * </ul>
  */
@@ -98,7 +99,7 @@ public class App {
 
     JwtUtil.validateConfiguration();
 
-    // ── 1. Cấu hình Jackson ───────────────────────────��──────
+    // ── 1. Cấu hình Jackson ─────────────────────────────────
     ObjectMapper mapper = new ObjectMapper();
     mapper.registerModule(new JavaTimeModule());
     mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -219,10 +220,11 @@ public class App {
           ctx.status(204);
         });
 
-    // Lịch sử yêu cầu nạp tiền của chính user
+    // Lịch sử yêu cầu nạp tiền của chính bidder
     app.get(
         "/api/users/me/deposit-requests",
         ctx -> {
+          requireRole(ctx, "BIDDER");
           Long userId = ctx.attribute("userId");
           ctx.json(depositRequestDao.findByUserId(userId));
         });
@@ -231,6 +233,7 @@ public class App {
     app.post(
         "/api/users/me/deposit",
         ctx -> {
+          requireRole(ctx, "BIDDER");
           Long userId = ctx.attribute("userId");
           DepositRequest req = ctx.bodyAsClass(DepositRequest.class);
           DepositRecord record = userService.requestDeposit(userId, req.getAmount());
@@ -531,8 +534,14 @@ public class App {
 
   /** Ném {@link UnauthorizedException} nếu request không đến từ tài khoản ADMIN. */
   private static void requireAdmin(io.javalin.http.Context ctx) {
-    if (!"ADMIN".equals(ctx.attribute("role"))) {
-      throw new UnauthorizedException("Only ADMIN is authorized to perform this action");
+    requireRole(ctx, "ADMIN");
+  }
+
+  /** Ném {@link UnauthorizedException} nếu request không có đúng role được yêu cầu. */
+  private static void requireRole(io.javalin.http.Context ctx, String requiredRole) {
+    if (!requiredRole.equals(ctx.attribute("role"))) {
+      throw new UnauthorizedException(
+          "Only " + requiredRole + " is authorized to perform this action");
     }
   }
 
