@@ -21,8 +21,6 @@
 
 ## Submission Links
 
-> Final checklist for LTNC submission. Replace the two `TODO` links below with the final PDF/video links before submitting to the course system.
-
 | Item | Link |
 |---|---|
 | GitHub repository | https://github.com/kieran-labs/oop-course-project-uet |
@@ -142,36 +140,39 @@ The application is split into a JavaFX desktop client, a Javalin server, and Pos
 ```mermaid
 flowchart LR
     subgraph Client["JavaFX Desktop Client"]
-        FXML["FXML Views"]
-        UI["UI Controllers<br/>MVC layer"]
-        Scene["SceneManager<br/>Session state"]
-        Rest["RestClient<br/>HTTP + JSON"]
-        WsClient["WebSocketClient<br/>auction/user channels"]
-        LiveUI["Auction Detail UI<br/>chart + countdown + notifications"]
+        ClientApp["ClientApp / Launcher"]
+        SceneManager["SceneManager<br/>single Scene + cached FXML"]
+        Controllers["FXML Controllers<br/>ui.controller"]
+        RestClient["RestClient<br/>HTTP JSON"]
+        WebSocketClient["WebSocketClient<br/>auction/user channels"]
+        ClientStore["NotificationStore<br/>BackgroundBidWatcher<br/>UserBalanceWatcher"]
 
-        FXML --> UI
-        UI --> Scene
-        UI --> Rest
-        UI --> WsClient
-        WsClient --> LiveUI
+        ClientApp --> SceneManager
+        SceneManager --> Controllers
+        Controllers --> RestClient
+        Controllers --> WebSocketClient
+        WebSocketClient --> ClientStore
     end
 
     subgraph Server["Javalin Server"]
-        Jwt["JwtMiddleware<br/>auth + role context"]
-        Controllers["REST Controllers<br/>Auth · Item · Auction · Bid · Notification"]
+        App["App.java<br/>composition root + inline routes"]
+        JwtMiddleware["JwtMiddleware<br/>auth + role context"]
+        RestControllers["REST Controllers<br/>Auth · Item · Auction · Bid · Notification"]
         WsHandler["AuctionWebSocketHandler"]
         Services["Service Layer<br/>business rules + transactions"]
-        Patterns["Design Patterns<br/>State · Factory · Observer · Strategy"]
-        Scheduler["AuctionScheduler<br/>lifecycle transitions"]
-        DAO["DAO Layer<br/>JDBI SQL access"]
+        Patterns["Design Patterns<br/>Factory · State · Observer · Strategy"]
+        Scheduler["AuctionScheduler"]
+        DAO["DAO Layer<br/>JDBI + SQL"]
     end
 
-    DB[("PostgreSQL<br/>embedded local / external CI<br/>Flyway migrations")]
+    DB[("PostgreSQL<br/>Embedded or external<br/>Flyway migrations")]
 
-    Rest -- "REST /api/* + JWT" --> Jwt
-    Jwt --> Controllers
-    Controllers --> Services
-    WsClient -- "WebSocket /ws/auction/{id}<br/>/ws/user/{id}" --> WsHandler
+    RestClient -- "REST /api/* + JWT" --> JwtMiddleware
+    JwtMiddleware --> RestControllers
+    JwtMiddleware --> App
+    RestControllers --> Services
+    App --> Services
+    WebSocketClient -- "/ws/auction/{id}<br/>/ws/user/{id}" --> WsHandler
     Services --> Patterns
     Services --> DAO
     Scheduler --> Services
@@ -181,46 +182,48 @@ flowchart LR
 ```
 
 ```text
-JavaFX Client
-  ├─ FXML views
-  ├─ ui/controller        # MVC controllers
-  ├─ RestClient           # REST / JSON calls
-  ├─ WebSocketClient      # auction + user WebSocket channels
-  └─ SceneManager         # navigation and session state
-
-Javalin Server
-  ├─ Controllers          # REST endpoints + WebSocket handler
-  ├─ Middleware           # JWT verification and role context
-  ├─ Services             # business logic and transactions
-  ├─ Patterns             # State, Factory, Observer, Strategy
-  ├─ DAOs                 # JDBI SQL access, SELECT FOR UPDATE locks
-  └─ PostgreSQL           # embedded by default, Flyway migrations V1-V17
+src/main/java/com/auction
+  ├─ App.java, AdminSeeder.java, ClientApp.java, Launcher.java
+  ├─ config/             # DatabaseConfig, JwtUtil
+  ├─ middleware/         # JwtMiddleware
+  ├─ controller/         # REST controllers + AuctionWebSocketHandler
+  ├─ service/            # business services + AuctionScheduler
+  ├─ dao/                # JDBI DAOs + row mappers
+  ├─ model/              # domain models, records, enums
+  ├─ dto/                # request/response/WebSocket/error contracts
+  ├─ exception/          # custom domain/API exceptions
+  ├─ pattern/            # factory, state, observer, strategy
+  ├─ util/               # REST/WS client, validators, notifications, formatting
+  └─ ui/                 # JavaFX controllers and navigation utilities
 ```
 
-Important design choices:
+---
 
-- **Client–Server separation:** only the server accesses the database.
-- **Client MVC:** JavaFX FXML views are separated from UI controllers.
-- **Server layering:** Controller → Service → DAO → Database.
-- **SQL-first persistence:** JDBI keeps locking and transaction behavior explicit.
-- **Database-level concurrency:** bidding correctness does not depend on a single JVM lock.
+## Source-Code Coverage Audit for UML
+
+The class diagrams below were reconciled against source files imported by `App.java`, the JavaFX entry points, core services, model classes, pattern implementations, and client utilities. The important correction from the previous README is that several endpoint groups are **not separate controller classes**: user profile/deposit, admin deposit/password-reset/user management, auto-bid endpoints, and `/internal/shutdown` are registered inline in `App.java`.
+
+| Package | Files represented in UML |
+|---|---|
+| `com.auction` | `App`, `AdminSeeder`, `ClientApp`, `Launcher` |
+| `config` / `middleware` | `DatabaseConfig`, `JwtUtil`, `JwtMiddleware` |
+| `controller` | `AuthController`, `ItemController`, `AuctionController`, `BidController`, `NotificationController`, `AuctionWebSocketHandler` |
+| `service` | `UserService`, `PasswordResetService`, `ItemService`, `AuctionService`, `BidService`, `NotificationService`, `AuctionScheduler` |
+| `dao` | `UserDao`, `ItemDao`, `AuctionDao`, `BidTransactionDao`, `AutoBidConfigDao`, `DepositRequestDao`, `PasswordResetRequestDao`, `NotificationDao`, `WalletTransactionDao`, row mappers |
+| `model` | `Entity`, `User`, `Admin`, `Seller`, `Bidder`, `Item`, `Electronics`, `Art`, `Vehicle`, `Auction`, `AuctionStatus`, `BidTransaction`, `AutoBidConfig`, `AutoBidStatus`, `AutoBidFailureReason`, `DepositRecord`, `PasswordResetRecord` |
+| `dto` | `LoginRequest`, `RegisterRequest`, `ForgotPasswordRequest`, `ChangePasswordRequest`, `DepositRequest`, `CreateItemRequest`, `CreateAuctionRequest`, `BidRequest`, `AutoBidRequest`, `PageRequest`, `UserResponse`, `AuctionResponse`, `BidUpdateMessage`, `ErrorResponse` |
+| `exception` | `InvalidBidException`, `AuctionClosedException`, `UnauthorizedException`, `NotFoundException`, `DuplicateException` |
+| `pattern` | `UserFactory`, `ItemFactory`, `AuctionStateFactory`, `AuctionState`, `AuctionStates`, `OpenState`, `RunningState`, `SettlingState`, `FinishedState`, `PaidState`, `CanceledState`, `AuctionEventListener`, `AuctionEventManager`, `WebSocketObserver`, `AutoBidStrategy`, `AutoBidExecutor`, `InTransactionBidExecutor` |
+| `util` | `MoneyValidator`, `NotificationFormat`, `RestClient`, `WebSocketClient`, `BackgroundBidWatcher`, `UserBalanceWatcher`, `NotificationStore`, `NotificationItem` |
+| `ui.controller` / `ui.util` | `WelcomeController`, `LoginController`, `RegisterController`, `ForgotPasswordController`, `AuctionListController`, `AuctionDetailController`, `CreateItemController`, `CreateAuctionController`, `ProfileController`, `DepositController`, `ChangePasswordController`, `AdminPanelController`, `SceneManager`, `Navigable` |
+
+Getter/setter boilerplate is intentionally summarized where it is structurally repetitive. Business methods, lifecycle methods, factory methods, validation methods, transaction methods, and WebSocket/event methods are listed explicitly.
 
 ---
 
 ## Class Diagrams
 
-The diagrams are split by architecture slice and now include the key attributes and methods needed to read the system as UML, not only as a dependency graph. Getter/setter boilerplate is intentionally omitted except where it explains the model, because listing every accessor would make the README harder to evaluate and can break Mermaid rendering.
-
-| Slice | Main files covered |
-|---|---|
-| Runtime composition | `App`, `AdminSeeder`, `DatabaseConfig`, `JwtUtil`, `JwtMiddleware`, controllers, services, DAOs, scheduler, WebSocket handler |
-| Domain model | `Entity`, user hierarchy, item hierarchy, auctions, bids, auto-bid config, deposit/password-reset records, enums |
-| API and contracts | REST controllers, request/response DTOs, error DTOs, custom exceptions |
-| Persistence | JDBI DAOs, row mappers, transaction boundaries, PostgreSQL/Flyway integration |
-| Design patterns | Factory, State, Observer, Strategy implementations |
-| JavaFX client | `ClientApp`, `Launcher`, `SceneManager`, `Navigable`, UI controllers, REST/WebSocket/client notification utilities |
-
-### 1. Runtime Composition and Dependency Wiring
+### 1. Runtime Composition, Security, and Inline Routes
 
 ```mermaid
 classDiagram
@@ -229,78 +232,243 @@ classDiagram
     class App {
         -int SERVER_PORT
         -Path DATA_DIR
+        -Path SERVER_PID_FILE
+        -Path SERVER_TOKEN_FILE
+        -SecureRandom SECURE_RANDOM
         -AtomicBoolean SHUTTING_DOWN
         +main(String[] args)
-        -buildJavalin(mapper)
-        -registerExceptionHandlers(app)
-        -seedAdminIfNeeded(userDao)
-        -stopServer(app,scheduler)
+        -buildJavalin(ObjectMapper mapper) Javalin
+        -registerShutdownHook(Javalin app, AuctionScheduler scheduler)
+        -stopServer(Javalin app, AuctionScheduler scheduler)
+        -isServerAlreadyRunning() boolean
+        -loadOrCreateShutdownToken() String
+        -writeServerPid()
+        -deleteServerPid()
+        -isLocalRequest(String ip) boolean
+        -requireAdmin(Context ctx)
+        -requireRole(Context ctx, String requiredRole)
+        -seedAdminIfNeeded(UserDao userDao)
+        -registerExceptionHandlers(Javalin app)
+    }
+
+    class InlineAppRoutes {
+        <<conceptual group inside App.java>>
+        +GET /api/health
+        +POST /internal/shutdown
+        +GET /api/users/me
+        +PUT /api/users/me/password
+        +GET /api/users/me/deposit-requests
+        +POST /api/users/me/deposit
+        +GET /api/admin/deposit-requests
+        +POST /api/admin/deposit-requests/{id}/approve
+        +POST /api/admin/deposit-requests/{id}/reject
+        +GET /api/admin/password-reset-requests
+        +POST /api/admin/password-reset-requests/{id}/approve
+        +POST /api/admin/password-reset-requests/{id}/reject
+        +DELETE /api/admin/auctions/{id}
+        +GET /api/admin/users
+        +DELETE /api/admin/users/{id}
+        +GET /api/auctions/{id}/auto-bid
+        +POST /api/auctions/{id}/auto-bid
+        +DELETE /api/auctions/{id}/auto-bid
+        +WS /ws/auction/{id}
+        +WS /ws/user/{id}
     }
 
     class AdminSeeder {
         -UserDao userDao
+        -String DEFAULT_ADMIN_USERNAME
+        -String DEFAULT_ADMIN_EMAIL
+        -String ENV_PASSWORD_VAR
+        -String DEMO_FALLBACK_PASSWORD
         +seed()
+        ~resolveAdminPassword() String
     }
 
     class DatabaseConfig {
-        -HikariDataSource dataSource
         -Jdbi jdbi
+        -HikariDataSource dataSource
+        -EmbeddedPostgres embeddedPostgres
+        -File EMBEDDED_DATA_DIR
         +create() Jdbi
         +shutDown()
-        -runMigrations(dataSource)
+        -initExternalPostgres(String dbUrl)
+        -initEmbeddedPostgres()
+        -runMigrations(HikariDataSource dataSource)
+        -buildHikariConfig(String url, String user, String pass) HikariConfig
+        -stopPreviousPostgresIfNeeded()
+        -registerShutdownHook()
     }
 
     class JwtUtil {
-        -String SECRET
+        -int MIN_SECRET_BYTES
+        -String SECRET_KEY
+        -Algorithm ALGORITHM
+        -JWTVerifier VERIFIER
         +validateConfiguration()
-        +createToken(userId,username,role,tokenVersion)
-        +verifyToken(token)
+        ~requireJwtSecret(String secret) String
+        +createToken(Long userId, String username, String role) String
+        +createToken(Long userId, String username, String role, int tokenVersion) String
+        +verifyToken(String token) DecodedJWT
     }
 
     class JwtMiddleware {
         -UserDao userDao
-        +configure(userDao)
-        +handle(ctx)
+        +configure(UserDao configuredUserDao)
+        +handle(Context ctx)
+        -attachUserClaims(Context ctx, DecodedJWT jwt)
+        -validateTokenVersion(DecodedJWT jwt)
+        -extractTokenVersion(DecodedJWT jwt) int
+    }
+
+    class AuthController {
+        +register(Javalin app, UserService userService)
+        +registerPasswordReset(Javalin app, PasswordResetService resetService)
+        -handleRegister(Context ctx, UserService userService)
+        -handleLogin(Context ctx, UserService userService)
+        -handleForgotPassword(Context ctx, PasswordResetService service)
+    }
+
+    class ItemController {
+        +register(Javalin app, ItemService itemService)
+        -handleGetAll(Context ctx, ItemService itemService)
+        -handleGetById(Context ctx, ItemService itemService)
+        -handleCreate(Context ctx, ItemService itemService)
+        -handleUpdate(Context ctx, ItemService itemService)
+        -handleDelete(Context ctx, ItemService itemService)
+    }
+
+    class AuctionController {
+        +register(Javalin app, AuctionService auctionService)
+        -handleGetAll(Context ctx, AuctionService auctionService)
+        -handleGetById(Context ctx, AuctionService auctionService)
+        -handleCreate(Context ctx, AuctionService auctionService)
+        -handleUpdate(Context ctx, AuctionService auctionService)
+        -handleDelete(Context ctx, AuctionService auctionService)
+    }
+
+    class BidController {
+        -BidService bidService
+        +register(Javalin app)
+        ~handleManualBid(Context ctx)
+    }
+
+    class NotificationController {
+        +register(Javalin app, NotificationService notificationService)
+        -handleGetNotifications(Context ctx, NotificationService notificationService)
+        -handleMarkRead(Context ctx, NotificationService notificationService)
+        -handleMarkAllRead(Context ctx, NotificationService notificationService)
     }
 
     class AuctionWebSocketHandler {
+        -Jdbi jdbi
+        -UserDao userDao
         -Map connections
         -Map userConnections
         -Map observers
+        -Map sessionExpiresAt
+        -Map expirationTasks
+        -ScheduledExecutorService expirationScheduler
         -AuctionEventManager eventManager
         -ObjectMapper objectMapper
-        +onConnect(ctx)
-        +onUserConnect(ctx)
-        +onClose(ctx)
-        +onUserClose(ctx)
-        +broadcast(auctionId,message)
-        +pushUserNotification(userId,message)
+        +onConnect(WsConnectContext ctx)
+        +onUserConnect(WsConnectContext ctx)
+        +onClose(WsCloseContext ctx)
+        +onUserClose(WsCloseContext ctx)
+        +onError(WsErrorContext ctx)
+        +onUserError(WsErrorContext ctx)
+        +broadcast(Long auctionId, BidUpdateMessage message)
+        +pushUserNotification(Long userId, String message)
+        +notifyBalanceUpdate(Long userId, BigDecimal newBalance, BigDecimal delta, boolean approved)
+        +saveNotificationToDatabase(Long userId, String message, String type)
     }
 
     class AuctionScheduler {
-        -ScheduledExecutorService scheduler
         -AuctionDao auctionDao
         -UserDao userDao
         -ItemDao itemDao
         -AuctionEventManager eventManager
+        -Jdbi jdbi
+        -AuctionWebSocketHandler wsHandler
+        -ScheduledExecutorService scheduler
+        -ScheduledFuture scheduledTask
+        -AtomicBoolean running
         +start()
         +stop()
-        -scanAndTransition()
-        -openToRunning(now)
-        -runningToFinished(now)
+        ~scanAndTransition()
+        -openToRunning(LocalDateTime now)
+        -runningToFinished(LocalDateTime now)
+        -settleAndClose(Long id, LocalDateTime now)
+        -notifyAuctionEnded(Auction auction)
     }
+
+    App --> DatabaseConfig
+    App --> JwtUtil
+    App --> JwtMiddleware
+    App --> AdminSeeder
+    App --> InlineAppRoutes
+    App --> AuthController
+    App --> ItemController
+    App --> AuctionController
+    App --> BidController
+    App --> NotificationController
+    App --> AuctionWebSocketHandler
+    App --> AuctionScheduler
+    JwtMiddleware --> JwtUtil
+    JwtMiddleware --> UserDao
+    AuctionWebSocketHandler --> JwtUtil
+    AuctionWebSocketHandler --> AuctionEventManager
+    AuctionWebSocketHandler --> WebSocketObserver
+    AuctionScheduler --> AuctionDao
+    AuctionScheduler --> UserDao
+    AuctionScheduler --> ItemDao
+    AuctionScheduler --> AuctionEventManager
+    AuctionScheduler --> AuctionWebSocketHandler
+```
+
+### 2. Service Layer and Data Access Layer
+
+```mermaid
+classDiagram
+    direction LR
 
     class UserService {
         -UserDao userDao
         -DepositRequestDao depositRequestDao
         -Jdbi jdbi
-        +register(req)
-        +login(req)
-        +findById(userId)
-        +changePassword(userId,req)
-        +requestDeposit(userId,amount)
-        +approveDeposit(requestId)
-        +delete(userId)
+        +register(RegisterRequest req) User
+        +login(LoginRequest req) String
+        +getRoleByUsername(String username) String
+        +findById(Long userId) UserResponse
+        +changePassword(Long userId, ChangePasswordRequest req)
+        +requestDeposit(Long userId, BigDecimal amount) DepositRecord
+        +getPendingDeposits() List
+        +approveDeposit(Long requestId) UserResponse
+        +rejectDeposit(Long requestId) Long
+        +getAll() List
+        +delete(Long userId)
+    }
+
+    class PasswordResetService {
+        -UserDao userDao
+        -PasswordResetRequestDao resetDao
+        -Jdbi jdbi
+        +requestReset(String email)
+        +getPendingRequests() List
+        +approveReset(Long requestId) String
+        +rejectReset(Long requestId)
+        -generateTempPassword() String
+    }
+
+    class ItemService {
+        -ItemDao itemDao
+        +create(CreateItemRequest req, Long sellerId) Item
+        +getAll() List
+        +getBySellerId(Long sellerId) List
+        +getById(Long id) Item
+        +update(Long id, CreateItemRequest request, Long requesterId) Item
+        +delete(Long id, Long requesterId, String requesterRole)
+        -checkOwnership(Item item, Long requesterId, String action)
     }
 
     class AuctionService {
@@ -309,126 +477,142 @@ classDiagram
         -UserDao userDao
         -AuctionEventManager eventManager
         -Jdbi jdbi
-        +getAll(status,pageRequest)
-        +getById(id)
-        +create(req,sellerId)
-        +update(id,req,sellerId)
-        +delete(id,requesterId,role)
-        +hardDelete(id)
-        +getState(auction)
+        -BidTransactionDao bidTransactionDao
+        -AuctionWebSocketHandler wsHandler
+        +getAll(String status, PageRequest pageRequest) List
+        +getById(Long id) AuctionResponse
+        +getAuctionById(Long id) AuctionResponse
+        +create(CreateAuctionRequest req, Long sellerId) Auction
+        +delete(Long id, Long requesterId, String requesterRole)
+        +hardDelete(Long id)
+        +getState(Auction auction) AuctionState
+        -createInTransaction(CreateAuctionRequest req, Long sellerId) Auction
+        -validateItemCanBeAuctioned(...)
+        -enrichAuctionResponse(Auction auction) AuctionResponse
     }
 
     class BidService {
         -AuctionDao auctionDao
         -BidTransactionDao bidTransactionDao
         -AutoBidConfigDao autoBidConfigDao
+        -AuctionEventManager eventManager
+        -Jdbi jdbi
+        -AuctionService auctionService
+        -UserDao userDao
         -AutoBidStrategy autoBidStrategy
         -AuctionWebSocketHandler wsHandler
-        +placeBid(auctionId,bidderId,amount,isAutoBid)
-        +getBidHistory(auctionId)
-        +createAutoBid(auctionId,bidderId,maxBid,increment)
-        -executeChainBidInHandle(handle,auctionId,bidderId,amount,events)
-        -notifyBidUpdate(auction,auctionId,bidderId,amount,isAutoBid)
-    }
-
-    class ItemService {
-        -ItemDao itemDao
-        +create(req,sellerId)
-        +getAll()
-        +getBySellerId(sellerId)
-        +getById(id)
-        +update(id,req,requesterId)
-        +delete(id,requesterId,role)
-    }
-
-    class PasswordResetService {
-        -UserDao userDao
-        -PasswordResetRequestDao resetDao
-        -Jdbi jdbi
-        +requestReset(email)
-        +getPendingRequests()
-        +approveReset(requestId)
-        +rejectReset(requestId)
+        +placeBid(Long auctionId, Long bidderId, BigDecimal amount, boolean isAutoBid) BidTransaction
+        +getBidHistory(Long auctionId) List
+        +createAutoBid(Long auctionId, Long bidderId, BigDecimal maxBid, BigDecimal increment) AutoBidConfig
+        -executeChainBidInHandle(...)
+        -notifyBidUpdate(...)
+        -requirePositiveIntegerVnd(BigDecimal amount, String label)
     }
 
     class NotificationService {
         -NotificationDao notificationDao
-        +getRecentNotifications(userId)
-        +markRead(notificationId,userId)
-        +markAllRead(userId)
+        +getRecentNotifications(Long userId) List
+        +markRead(Long notificationId, Long userId)
+        +markAllRead(Long userId) int
     }
 
-    class AuthController {
-        +register(app,userService)
-        +registerPasswordReset(app,resetService)
-        -handleRegister(ctx,userService)
-        -handleLogin(ctx,userService)
-        -handleForgotPassword(ctx,service)
+    class UserDao {
+        -Jdbi jdbi
+        -String SELECT_COLUMNS
+        +insert(User user) User
+        +findById(Long id) Optional
+        +findByIdForUpdate(Handle handle, Long id) User
+        +findByUsername(String username) Optional
+        +findByEmail(String email) Optional
+        +existsByUsername(String username) boolean
+        +existsByEmail(String email) boolean
+        +findAll() List
+        +update(User user)
+        +delete(Long id)
+        +updateReservedBalanceInTransaction(Handle handle, Long userId, BigDecimal amount)
+        +releaseReservedBalanceInTransaction(Handle handle, Long userId, BigDecimal amount)
     }
 
-    class ItemController {
-        +register(app,itemService)
-        -handleGetAll(ctx,itemService)
-        -handleGetById(ctx,itemService)
-        -handleCreate(ctx,itemService)
-        -handleUpdate(ctx,itemService)
-        -handleDelete(ctx,itemService)
+    class ItemDao {
+        -Jdbi jdbi
+        +insert(Item item) Item
+        +findAll() List
+        +findById(Long id) Optional
+        +findByIdForUpdate(Handle handle, Long id) Optional
+        +findBySellerId(Long sellerId) List
+        +update(Item item)
+        +delete(Long id)
+        +updateStatusInTransaction(Handle handle, Long itemId, String status)
     }
 
-    class AuctionController {
-        +register(app,auctionService)
-        -handleGetAll(ctx,auctionService)
-        -handleGetById(ctx,auctionService)
-        -handleCreate(ctx,auctionService)
-        -handleUpdate(ctx,auctionService)
-        -handleDelete(ctx,auctionService)
+    class AuctionDao {
+        -Jdbi jdbi
+        -String SELECT_COLUMNS
+        +insert(Auction auction) Auction
+        +insertInTransaction(Handle handle, Auction auction) Auction
+        +findById(Long id) Optional
+        +findByIdForUpdate(Handle handle, Long id) Auction
+        +findAll(PageRequest pageRequest) List
+        +findByStatus(String status, PageRequest pageRequest) List
+        +existsById(Long id) boolean
+        +existsActiveAuctionForItem(Long itemId) boolean
+        +existsPaidAuctionForItem(Long itemId) boolean
+        +update(Auction auction)
+        +updateInTransaction(Handle handle, Auction auction)
+        +atomicTransition(Long id, String from, String to) boolean
+        +findDueAuctionIds(String status, LocalDateTime now) List
+        +findExpiredAuctionIds(String status, LocalDateTime now) List
     }
 
-    class BidController {
-        -BidService bidService
-        +register(app)
-        +handleManualBid(ctx)
+    class BidTransactionDao {
+        -Jdbi jdbi
+        +insert(Handle handle, BidTransaction tx) BidTransaction
+        +findByAuctionId(Long auctionId) List
     }
 
-    class NotificationController {
-        +register(app,notificationService)
-        -handleGetNotifications(ctx,service)
-        -handleMarkRead(ctx,service)
-        -handleMarkAllRead(ctx,service)
+    class AutoBidConfigDao {
+        -Jdbi jdbi
+        +insert(AutoBidConfig config) AutoBidConfig
+        +findById(Long id) Optional
+        +findByAuctionAndBidder(Long auctionId, Long bidderId) Optional
+        +findActiveByAuctionId(Long auctionId) List
+        +hasActiveConfig(Handle handle, Long auctionId, Long bidderId) boolean
+        +update(AutoBidConfig config)
     }
 
-    class UserDao
-    class ItemDao
-    class AuctionDao
-    class BidTransactionDao
-    class AutoBidConfigDao
-    class DepositRequestDao
-    class PasswordResetRequestDao
-    class NotificationDao
-    class WalletTransactionDao
-    class AutoBidStrategy
-    class AuctionEventManager
-    class Jdbi
-    class PostgreSQL
+    class DepositRequestDao {
+        -Jdbi jdbi
+        +insert(DepositRecord record) DepositRecord
+        +findById(Long id) Optional
+        +findByIdForUpdate(Handle handle, Long id) Optional
+        +findByUserId(Long userId) List
+        +findByStatus(String status) List
+        +transitionStatusInTransaction(Handle handle, Long id, String from, String to)
+    }
 
-    App --> DatabaseConfig : creates
-    DatabaseConfig --> Jdbi : configures
-    DatabaseConfig --> PostgreSQL : embedded/external
-    App --> JwtUtil : validates secret
-    App --> JwtMiddleware : configures
-    App --> AdminSeeder : seeds admin
-    App --> AuctionEventManager
-    App --> AuctionWebSocketHandler
-    App --> AutoBidStrategy
-    App --> AuctionScheduler
-    App --> AuthController : registers routes
-    App --> ItemController : registers routes
-    App --> AuctionController : registers routes
-    App --> BidController : registers routes
-    App --> NotificationController : registers routes
+    class PasswordResetRequestDao {
+        -Jdbi jdbi
+        +insert(PasswordResetRecord record)
+        +findByIdForUpdate(Handle handle, Long id) Optional
+        +findByStatus(String status) List
+        +hasPendingRequest(Long userId) boolean
+        +transitionStatusInTransaction(Handle handle, Long id, String from, String to)
+    }
+
+    class NotificationDao {
+        -Jdbi jdbi
+        +findRecentByUserId(Long userId) List
+        +markRead(Long notificationId, Long userId)
+        +markAllRead(Long userId) int
+    }
+
+    class WalletTransactionDao {
+        +insert(Handle handle, Long userId, Long auctionId, Long bidId, String type, BigDecimal amount, String note)
+    }
 
     UserService --> UserDao
     UserService --> DepositRequestDao
+    UserService ..> WalletTransactionDao
     PasswordResetService --> UserDao
     PasswordResetService --> PasswordResetRequestDao
     ItemService --> ItemDao
@@ -436,26 +620,16 @@ classDiagram
     AuctionService --> ItemDao
     AuctionService --> UserDao
     AuctionService --> BidTransactionDao
-    AuctionService --> AuctionEventManager
-    AuctionService --> AuctionWebSocketHandler
     BidService --> AuctionDao
     BidService --> BidTransactionDao
     BidService --> AutoBidConfigDao
     BidService --> UserDao
     BidService --> AuctionService
-    BidService --> AutoBidStrategy
-    BidService --> AuctionEventManager
-    BidService --> AuctionWebSocketHandler
     BidService ..> WalletTransactionDao
     NotificationService --> NotificationDao
-    AuctionScheduler --> AuctionDao
-    AuctionScheduler --> UserDao
-    AuctionScheduler --> ItemDao
-    AuctionScheduler --> AuctionEventManager
-    AuctionScheduler --> AuctionWebSocketHandler
 ```
 
-### 2. Domain Model and Core Business Objects
+### 3. Domain Model, Records, and Enums
 
 ```mermaid
 classDiagram
@@ -485,19 +659,13 @@ classDiagram
         +String getUsername()
         +BigDecimal getBalance()
         +void setBalance(BigDecimal balance)
+        +int getTokenVersion()
+        +void setTokenVersion(int tokenVersion)
     }
 
-    class Admin {
-        +String getRole()
-    }
-
-    class Seller {
-        +String getRole()
-    }
-
-    class Bidder {
-        +String getRole()
-    }
+    class Admin { +String getRole() }
+    class Seller { +String getRole() }
+    class Bidder { +String getRole() }
 
     class Item {
         <<abstract>>
@@ -507,28 +675,15 @@ classDiagram
         -String status
         +String getCategory()
         +String getName()
+        +String getDescription()
         +Long getSellerId()
         +String getStatus()
         +void setStatus(String status)
     }
 
-    class Electronics {
-        -String brand
-        +String getCategory()
-        +String getBrand()
-    }
-
-    class Art {
-        -String artist
-        +String getCategory()
-        +String getArtist()
-    }
-
-    class Vehicle {
-        -Integer year
-        +String getCategory()
-        +Integer getYear()
-    }
+    class Electronics { -String brand +String getCategory() +String getBrand() }
+    class Art { -String artist +String getCategory() +String getArtist() }
+    class Vehicle { -Integer year +String getCategory() +Integer getYear() }
 
     class Auction {
         -Long itemId
@@ -546,6 +701,7 @@ classDiagram
         +BigDecimal getCurrentPrice()
         +void setCurrentPrice(BigDecimal price)
         +void setStatus(AuctionStatus status)
+        +void setUpdatedAt(LocalDateTime updatedAt)
     }
 
     class BidTransaction {
@@ -604,35 +760,9 @@ classDiagram
         +void setStatus(String status)
     }
 
-    class AuctionStatus {
-        <<enum>>
-        OPEN
-        RUNNING
-        SETTLING
-        FINISHED
-        PAID
-        CANCELED
-        +from(String s)
-    }
-
-    class AutoBidStatus {
-        <<enum>>
-        ACTIVE
-        STOPPED
-        EXHAUSTED
-        FAILED
-        +from(String value)
-    }
-
-    class AutoBidFailureReason {
-        <<enum>>
-        MAX_PRICE_TOO_LOW
-        INSUFFICIENT_BALANCE
-        AUCTION_NOT_RUNNING
-        BIDDER_ALREADY_HIGHEST
-        ACTIVE_AUTOBID_EXISTS
-        +from(String value)
-    }
+    class AuctionStatus { <<enum>> OPEN RUNNING SETTLING FINISHED PAID CANCELED +from(String s) }
+    class AutoBidStatus { <<enum>> ACTIVE STOPPED EXHAUSTED FAILED +from(String value) }
+    class AutoBidFailureReason { <<enum>> MAX_PRICE_TOO_LOW INSUFFICIENT_BALANCE AUCTION_NOT_RUNNING BIDDER_ALREADY_HIGHEST ACTIVE_AUTOBID_EXISTS +from(String value) }
 
     Entity <|-- User
     User <|-- Admin
@@ -652,186 +782,59 @@ classDiagram
     Bidder "1" --> "0..*" BidTransaction : places
     Auction "1" --> "0..*" AutoBidConfig : auto-bid rules
     Bidder "1" --> "0..*" AutoBidConfig : configures
-    Bidder "1" --> "0..*" DepositRecord : requests
-    User "1" --> "0..*" PasswordResetRecord : requests
+    Bidder "1" --> "0..*" DepositRecord : deposit requests
+    User "1" --> "0..*" PasswordResetRecord : reset requests
     Auction --> AuctionStatus
     AutoBidConfig --> AutoBidStatus
     AutoBidConfig --> AutoBidFailureReason
 ```
 
-### 3. REST API, Service Layer, DTOs, and Error Contracts
+### 4. DTOs, WebSocket Contracts, and Exceptions
 
 ```mermaid
 classDiagram
     direction LR
 
-    class AuthController {
-        +register(app,userService)
-        +registerPasswordReset(app,resetService)
-        -handleRegister(ctx,userService)
-        -handleLogin(ctx,userService)
-        -handleForgotPassword(ctx,service)
-    }
+    class LoginRequest { -String username -String password +getUsername() +getPassword() }
+    class RegisterRequest { -String username -String email -String password -String role +getUsername() +getEmail() +getPassword() +getRole() }
+    class ForgotPasswordRequest { -String email +getEmail() }
+    class ChangePasswordRequest { -String currentPassword -String newPassword +getCurrentPassword() +getNewPassword() }
+    class DepositRequest { -BigDecimal amount +getAmount() }
+    class CreateItemRequest { -String name -String description -String category -String categoryDetail +getName() +getDescription() +getCategory() +getCategoryDetail() }
+    class CreateAuctionRequest { -Long itemId -BigDecimal startingPrice -LocalDateTime startTime -LocalDateTime endTime +getItemId() +getStartingPrice() +getStartTime() +getEndTime() }
+    class BidRequest { -BigDecimal amount +getAmount() }
+    class AutoBidRequest { -BigDecimal maxBid -BigDecimal increment +getMaxBid() +getIncrement() }
+    class PageRequest { -int page -int size -int offset +of(int page,int size) PageRequest +getLimit() int +getOffset() int }
 
-    class ItemController {
-        +register(app,itemService)
-        -handleGetAll(ctx,itemService)
-        -handleCreate(ctx,itemService)
-        -handleUpdate(ctx,itemService)
-        -requireRole(ctx,role)
-    }
-
-    class AuctionController {
-        +register(app,auctionService)
-        -handleGetAll(ctx,auctionService)
-        -handleGetById(ctx,auctionService)
-        -handleCreate(ctx,auctionService)
-        -handleUpdate(ctx,auctionService)
-        -handleDelete(ctx,auctionService)
-    }
-
-    class BidController {
-        -BidService bidService
-        +register(app)
-        +handleManualBid(ctx)
-    }
-
-    class NotificationController {
-        +register(app,notificationService)
-        -handleGetNotifications(ctx,service)
-        -handleMarkRead(ctx,service)
-        -handleMarkAllRead(ctx,service)
-    }
-
-    class UserService {
-        -UserDao userDao
-        -DepositRequestDao depositRequestDao
-        -Jdbi jdbi
-        +register(RegisterRequest req)
-        +login(LoginRequest req)
-        +findById(Long userId)
-        +changePassword(userId,req)
-        +requestDeposit(userId,amount)
-        +approveDeposit(requestId)
-        +rejectDeposit(requestId)
-    }
-
-    class AuctionService {
-        -AuctionDao auctionDao
-        -ItemDao itemDao
-        -UserDao userDao
-        +getAll(status,pageRequest)
-        +getById(id)
-        +create(req,sellerId)
-        +delete(id,requesterId,role)
-        +getState(auction)
-        -enrichAuctionResponse(auction)
-    }
-
-    class BidService {
-        -AuctionDao auctionDao
-        -BidTransactionDao bidTransactionDao
-        -AutoBidConfigDao autoBidConfigDao
-        +placeBid(auctionId,bidderId,amount,isAutoBid)
-        +getBidHistory(auctionId)
-        +createAutoBid(auctionId,bidderId,maxBid,increment)
-        -requirePositiveIntegerVnd(amount,label)
-    }
-
-    class LoginRequest {
-        -String username
-        -String password
-        +getUsername()
-        +getPassword()
-    }
-
-    class RegisterRequest {
-        -String username
-        -String email
-        -String password
-        -String role
-        +getUsername()
-        +getEmail()
-        +getRole()
-    }
-
-    class CreateItemRequest {
-        -String name
-        -String description
-        -String category
-        -String categoryDetail
-        +getName()
-        +getCategory()
-        +getCategoryDetail()
-    }
-
-    class CreateAuctionRequest {
-        -Long itemId
-        -BigDecimal startingPrice
-        -LocalDateTime startTime
-        -LocalDateTime endTime
-        +getItemId()
-        +getStartingPrice()
-        +getStartTime()
-        +getEndTime()
-    }
-
-    class BidRequest {
-        -BigDecimal amount
-        +getAmount()
-    }
-
-    class AutoBidRequest {
-        -BigDecimal maxBid
-        -BigDecimal increment
-        +getMaxBid()
-        +getIncrement()
-    }
-
-    class PageRequest {
-        -int page
-        -int size
-        -int offset
-        +of(page,size)
-        +getLimit()
-        +getOffset()
-    }
-
-    class UserResponse {
-        -Long id
-        -String username
-        -String email
-        -String role
-        -BigDecimal balance
-        +from(User user)
-    }
-
-    class AuctionResponse {
-        -Long id
-        -String itemName
-        -String itemCategory
-        -BigDecimal currentPrice
-        -String status
-        -String leadingBidderUsername
-        -long remainingTimeMs
-        +from(Auction auction)
-    }
+    class UserResponse { -Long id -String username -String email -String role -BigDecimal balance -BigDecimal reservedBalance +from(User user) UserResponse }
+    class AuctionResponse { -Long id -String itemName -String itemCategory -BigDecimal startingPrice -BigDecimal currentPrice -String status -String leadingBidderUsername -long remainingTimeMs +from(Auction auction) AuctionResponse }
+    class ErrorResponse { -String code -String message +of(String code,String message) ErrorResponse }
 
     class BidUpdateMessage {
+        +TYPE_BID_UPDATE
+        +TYPE_TIME_EXTENDED
+        +TYPE_AUCTION_ENDED
+        +TYPE_AUTO_BID_TRIGGERED
+        +TYPE_BALANCE_UPDATED
+        +TYPE_USER_NOTIFICATION
         -String type
         -Long auctionId
         -BigDecimal currentPrice
         -Long leadingBidderId
+        -String leadingBidderUsername
+        -LocalDateTime endTime
+        -LocalDateTime timestamp
+        -boolean autoBid
+        -BigDecimal newBalance
+        -BigDecimal balanceDelta
+        -boolean approved
         -String message
         +bidUpdate(...)
         +timeExtended(...)
         +auctionEnded(...)
-    }
-
-    class ErrorResponse {
-        -String code
-        -String message
-        +of(code,message)
+        +balanceUpdated(...)
+        +balanceChanged(...)
+        +userNotification(...)
     }
 
     class InvalidBidException
@@ -840,194 +843,14 @@ classDiagram
     class NotFoundException
     class DuplicateException
 
-    AuthController --> UserService
-    AuthController --> PasswordResetService
-    AuthController ..> LoginRequest
-    AuthController ..> RegisterRequest
-    ItemController --> ItemService
-    ItemController ..> CreateItemRequest
-    AuctionController --> AuctionService
-    AuctionController ..> CreateAuctionRequest
-    AuctionController ..> PageRequest
-    AuctionController ..> AuctionResponse
-    BidController --> BidService
-    BidController ..> BidRequest
-    NotificationController --> NotificationService
-    UserService ..> UserResponse
-    AuctionService ..> AuctionResponse
-    BidService ..> BidUpdateMessage
-    BidService ..> AutoBidRequest
+    UserResponse ..> User
+    AuctionResponse ..> Auction
+    BidUpdateMessage ..> Auction
     ErrorResponse ..> InvalidBidException
     ErrorResponse ..> AuctionClosedException
     ErrorResponse ..> UnauthorizedException
     ErrorResponse ..> NotFoundException
     ErrorResponse ..> DuplicateException
-```
-
-### 4. Persistence Layer, DAOs, and Database Mapping
-
-```mermaid
-classDiagram
-    direction LR
-
-    class DatabaseConfig {
-        -HikariDataSource dataSource
-        -Jdbi jdbi
-        +create() Jdbi
-        +shutDown()
-        -startEmbeddedPostgres()
-        -configureJdbi(dataSource)
-        -runMigrations(dataSource)
-    }
-
-    class UserDao {
-        -Jdbi jdbi
-        -String SELECT_COLUMNS
-        +insert(User user)
-        +findById(id)
-        +findByIdForUpdate(handle,id)
-        +findByUsername(username)
-        +findByEmail(email)
-        +update(User user)
-        +delete(id)
-        +updateReservedBalanceInTransaction(handle,userId,amount)
-        +releaseReservedBalanceInTransaction(handle,userId,amount)
-    }
-
-    class ItemDao {
-        -Jdbi jdbi
-        +insert(Item item)
-        +findAll()
-        +findById(id)
-        +findByIdForUpdate(handle,id)
-        +findBySellerId(sellerId)
-        +update(Item item)
-        +delete(id)
-        +updateStatusInTransaction(handle,itemId,status)
-    }
-
-    class AuctionDao {
-        -Jdbi jdbi
-        +insert(Auction auction)
-        +insertInTransaction(handle,auction)
-        +findAll(pageRequest)
-        +findById(id)
-        +findByIdForUpdate(handle,id)
-        +findByStatus(status,pageRequest)
-        +updateInTransaction(handle,auction)
-        +atomicTransition(id,from,to)
-        +findDueAuctionIds(status,now)
-        +findExpiredAuctionIds(status,now)
-    }
-
-    class BidTransactionDao {
-        -Jdbi jdbi
-        +insert(handle,tx)
-        +findByAuctionId(auctionId)
-        +findByBidderId(bidderId)
-    }
-
-    class AutoBidConfigDao {
-        -Jdbi jdbi
-        +insert(config)
-        +findById(id)
-        +findByAuctionAndBidder(auctionId,bidderId)
-        +findActiveByAuctionId(auctionId)
-        +hasActiveConfig(handle,auctionId,bidderId)
-        +update(config)
-    }
-
-    class DepositRequestDao {
-        -Jdbi jdbi
-        +insert(record)
-        +findById(id)
-        +findByIdForUpdate(handle,id)
-        +findByUserId(userId)
-        +findByStatus(status)
-        +transitionStatusInTransaction(handle,id,from,to)
-    }
-
-    class PasswordResetRequestDao {
-        -Jdbi jdbi
-        +insert(record)
-        +findByIdForUpdate(handle,id)
-        +findByStatus(status)
-        +hasPendingRequest(userId)
-        +transitionStatusInTransaction(handle,id,from,to)
-    }
-
-    class NotificationDao {
-        -Jdbi jdbi
-        +findRecentByUserId(userId)
-        +markRead(notificationId,userId)
-        +markAllRead(userId)
-    }
-
-    class WalletTransactionDao {
-        +insert(handle,userId,auctionId,bidId,type,amount,note)
-    }
-
-    class UserMapper {
-        +map(rs,ctx) User
-    }
-
-    class ItemMapper {
-        +map(rs,ctx) Item
-    }
-
-    class AuctionMapper {
-        +map(rs,ctx) Auction
-    }
-
-    class BidTransactionMapper {
-        +map(rs,ctx) BidTransaction
-    }
-
-    class AutoBidConfigMapper {
-        +map(rs,ctx) AutoBidConfig
-    }
-
-    class Jdbi
-    class Flyway
-    class HikariDataSource
-    class PostgreSQL
-    class User
-    class Item
-    class Auction
-    class BidTransaction
-    class AutoBidConfig
-    class DepositRecord
-    class PasswordResetRecord
-
-    DatabaseConfig --> HikariDataSource
-    DatabaseConfig --> Flyway
-    DatabaseConfig --> Jdbi
-    HikariDataSource --> PostgreSQL
-    Flyway --> PostgreSQL
-    Jdbi --> PostgreSQL
-
-    UserDao --> Jdbi
-    ItemDao --> Jdbi
-    AuctionDao --> Jdbi
-    BidTransactionDao --> Jdbi
-    AutoBidConfigDao --> Jdbi
-    DepositRequestDao --> Jdbi
-    PasswordResetRequestDao --> Jdbi
-    NotificationDao --> Jdbi
-    WalletTransactionDao ..> Jdbi
-
-    UserDao --> UserMapper
-    ItemDao --> ItemMapper
-    AuctionDao --> AuctionMapper
-    BidTransactionDao --> BidTransactionMapper
-    AutoBidConfigDao --> AutoBidConfigMapper
-    UserMapper ..> User
-    ItemMapper ..> Item
-    AuctionMapper ..> Auction
-    BidTransactionMapper ..> BidTransaction
-    AutoBidConfigMapper ..> AutoBidConfig
-    DepositRequestDao ..> DepositRecord
-    PasswordResetRequestDao ..> PasswordResetRecord
 ```
 
 ### 5. Design Patterns and Realtime Collaboration
@@ -1036,121 +859,38 @@ classDiagram
 classDiagram
     direction LR
 
-    class UserFactory {
-        +create(role) User
-    }
-
-    class ItemFactory {
-        +create(req,sellerId) Item
-        -parseYear(yearText) int
-    }
-
-    class AuctionStateFactory {
-        +create(status) AuctionState
-    }
+    class UserFactory { +create(String role) User }
+    class ItemFactory { +create(CreateItemRequest req, Long sellerId) Item -parseYear(String yearText) int }
+    class AuctionStateFactory { +create(String status) AuctionState }
 
     class AuctionState {
         <<interface>>
-        +placeBid(Auction auction,BigDecimal amount,Long bidderId)
+        +placeBid(Auction auction, BigDecimal amount, Long bidderId)
         +close(Auction auction)
         +edit(Auction auction)
-        +extend(Auction auction,long extraSeconds)
+        +extend(Auction auction, long extraSeconds)
     }
 
-    class AuctionStates {
-        +AuctionState OPEN
-        +AuctionState RUNNING
-        +AuctionState SETTLING
-        +AuctionState FINISHED
-        +AuctionState PAID
-        +AuctionState CANCELED
-    }
+    class AuctionStates { +OPEN +RUNNING +SETTLING +FINISHED +PAID +CANCELED }
+    class OpenState { +placeBid(...) +close(...) +edit(...) +extend(...) }
+    class RunningState { +placeBid(...) +close(...) +edit(...) +extend(...) }
+    class SettlingState { +placeBid(...) +close(...) +edit(...) +extend(...) }
+    class FinishedState { +placeBid(...) +close(...) +edit(...) +extend(...) }
+    class PaidState { +placeBid(...) +close(...) +edit(...) +extend(...) }
+    class CanceledState { +placeBid(...) +close(...) +edit(...) +extend(...) }
 
-    class OpenState {
-        +placeBid(auction,amount,bidderId)
-        +close(auction)
-        +edit(auction)
-        +extend(auction,extraSeconds)
-    }
+    class AuctionEventListener { <<interface>> +onBidUpdate(BidUpdateMessage msg) +onTimeExtended(BidUpdateMessage msg) +onAuctionEnd(BidUpdateMessage msg) }
+    class AuctionEventManager { -Map listeners +subscribe(Long auctionId,AuctionEventListener listener) +unsubscribe(Long auctionId,AuctionEventListener listener) +notifyBidUpdate(Long auctionId,BidUpdateMessage msg) +notifyTimeExtended(Long auctionId,BidUpdateMessage msg) +notifyAuctionEnd(Long auctionId,BidUpdateMessage msg) -notifyAll(...) }
+    class WebSocketObserver { -AuctionWebSocketHandler handler -Long auctionId +onBidUpdate(BidUpdateMessage msg) +onTimeExtended(BidUpdateMessage msg) +onAuctionEnd(BidUpdateMessage msg) }
 
-    class RunningState {
-        +placeBid(auction,amount,bidderId)
-        +close(auction)
-        +edit(auction)
-        +extend(auction,extraSeconds)
-    }
+    class AutoBidStrategy { -AutoBidConfigDao autoBidConfigDao -UserDao userDao +executeAll(Long auctionId,BigDecimal currentPriceAfterBid,Long initialLeaderId,AutoBidExecutor executor) +executeAllInTransaction(Handle handle,Long auctionId,BigDecimal currentPriceAfterBid,Long initialLeaderId,InTransactionBidExecutor executor) }
+    class AutoBidExecutor { <<interface>> +execute(Long auctionId,Long bidderId,BigDecimal amount) BidTransaction }
+    class InTransactionBidExecutor { <<interface>> +execute(Handle handle,Long auctionId,Long bidderId,BigDecimal amount) BidTransaction }
 
-    class SettlingState {
-        +placeBid(auction,amount,bidderId)
-        +close(auction)
-        +edit(auction)
-        +extend(auction,extraSeconds)
-    }
-
-    class FinishedState {
-        +placeBid(auction,amount,bidderId)
-        +close(auction)
-        +edit(auction)
-        +extend(auction,extraSeconds)
-    }
-
-    class PaidState
-    class CanceledState
-
-    class AuctionEventListener {
-        <<interface>>
-        +onBidUpdate(BidUpdateMessage msg)
-        +onTimeExtended(BidUpdateMessage msg)
-        +onAuctionEnd(BidUpdateMessage msg)
-    }
-
-    class AuctionEventManager {
-        -Map listeners
-        +subscribe(auctionId,listener)
-        +unsubscribe(auctionId,listener)
-        +notifyBidUpdate(auctionId,msg)
-        +notifyTimeExtended(auctionId,msg)
-        +notifyAuctionEnd(auctionId,msg)
-        -notifyAll(auctionId,action,eventType)
-    }
-
-    class WebSocketObserver {
-        -AuctionWebSocketHandler handler
-        -Long auctionId
-        +onBidUpdate(msg)
-        +onTimeExtended(msg)
-        +onAuctionEnd(msg)
-    }
-
-    class AutoBidStrategy {
-        -AutoBidConfigDao autoBidConfigDao
-        -UserDao userDao
-        +executeAll(auctionId,currentPrice,initialLeaderId,executor)
-        +executeAllInTransaction(handle,auctionId,currentPrice,leaderId,executor)
-    }
-
-    class AutoBidExecutor {
-        <<interface>>
-        +execute(auctionId,bidderId,amount) BidTransaction
-    }
-
-    class InTransactionBidExecutor {
-        <<interface>>
-        +execute(handle,auctionId,bidderId,amount) BidTransaction
-    }
-
-    class AuctionWebSocketHandler
-    class User
-    class Item
-    class Auction
-    class AutoBidConfig
-    class BidUpdateMessage
-
-    UserFactory ..> User : creates subclass
-    ItemFactory ..> Item : creates subclass
+    UserFactory ..> User
+    ItemFactory ..> Item
     AuctionStateFactory --> AuctionStates
     AuctionStateFactory ..> AuctionState
-
     AuctionState <|.. OpenState
     AuctionState <|.. RunningState
     AuctionState <|.. SettlingState
@@ -1163,36 +903,23 @@ classDiagram
     AuctionStates --> FinishedState
     AuctionStates --> PaidState
     AuctionStates --> CanceledState
-    AuctionState ..> Auction
-
     AuctionEventListener <|.. WebSocketObserver
-    AuctionEventManager --> AuctionEventListener : subscribe/notify
-    WebSocketObserver --> AuctionWebSocketHandler : broadcast
-    AuctionEventManager ..> BidUpdateMessage
-
-    AutoBidStrategy --> AutoBidConfig : PriorityQueue by registeredAt
+    AuctionEventManager --> AuctionEventListener
+    WebSocketObserver --> AuctionWebSocketHandler
+    AutoBidStrategy --> AutoBidConfig
     AutoBidStrategy --> AutoBidExecutor
     AutoBidStrategy --> InTransactionBidExecutor
-    AutoBidStrategy ..> Auction
 ```
 
-### 6. JavaFX Client, Navigation, and Realtime Utilities
+### 6. JavaFX Client, Navigation, Utilities, and Notifications
 
 ```mermaid
 classDiagram
     direction TB
 
-    class Launcher {
-        +main(String[] args)
-    }
-
-    class ClientApp {
-        -double MIN_WIDTH
-        -double MIN_HEIGHT
-        +start(Stage primaryStage)
-        +main(String[] args)
-        -loadFonts()
-    }
+    class Launcher { +main(String[] args) }
+    class ClientApp { -double MIN_WIDTH -double MIN_HEIGHT +start(Stage primaryStage) +main(String[] args) -loadFonts() }
+    class Navigable { <<interface>> +onNavigatedTo() +onDataReceived(Object data) +onNavigatedFrom() }
 
     class SceneManager {
         -Stage primaryStage
@@ -1205,222 +932,43 @@ classDiagram
         -String currentUsername
         -String currentRole
         -Long currentUserId
-        +init(primaryStage,width,height)
-        +getInstance()
-        +navigateTo(fxml)
-        +navigateTo(fxml,data)
-        +navigateBack(fallbackFxml)
+        +init(Stage primaryStage,double width,double height) SceneManager
+        +getInstance() SceneManager
+        +navigateTo(String fxml)
+        +navigateTo(String fxml,Object data)
+        +navigateBack(String fallbackFxml)
         +logout()
-        +invalidateCache(fxml)
+        +invalidateCache(String fxml)
     }
 
-    class Navigable {
-        <<interface>>
-        +onNavigatedTo()
-        +onDataReceived(Object data)
-        +onNavigatedFrom()
-    }
+    class WelcomeController { +goToLoginAsAdmin() +goToLoginAsBidder() +goToLoginAsSeller() }
+    class LoginController { -TextField usernameField -PasswordField passwordField -String expectedRole +onDataReceived(Object data) +onNavigatedTo() +onNavigatedFrom() +handleLogin() +goToRegister() +goToForgotPassword() }
+    class RegisterController { -TextField usernameField -TextField emailField -PasswordField passwordField -ComboBox roleCombo +onNavigatedTo() +handleRegister() +goToLogin() }
+    class ForgotPasswordController { -TextField emailField -Button submitButton +onNavigatedTo() +handleSubmit() }
+    class AuctionListController { -TableView auctionTable -ObservableList auctions -Timeline refreshTimeline +onNavigatedTo() +onNavigatedFrom() +handleSearch() +loadAuctions() +handleBellClick() }
+    class AuctionDetailController { -Long auctionId -AuctionResponse currentAuction -WebSocketClient webSocketClient -Timeline countdownTimeline +onDataReceived(Object data) +onNavigatedTo() +onNavigatedFrom() +handleBid() +handleAutoBid() +handleCancelAutoBid() +loadAuctionDetail() }
+    class CreateItemController { -TextField nameField -TextArea descriptionField -ComboBox categoryCombo +onNavigatedTo() +handleCategoryChange() +handleCreate() +goBack() }
+    class CreateAuctionController { -ComboBox itemCombo -TextField startingPriceField -DatePicker startDatePicker -DatePicker endDatePicker +onNavigatedTo() +handleCreate() +goToCreateItem() +goBack() }
+    class ProfileController { -Label usernameLabel -Label roleLabel -Label profileBalanceLabel +onNavigatedTo() +onNavigatedFrom() +goToChangePassword() +goToDeposit() +handleLogout() }
+    class DepositController { -TextField amountField -ListView historyList -Timeline depositPollTimeline +onNavigatedTo() +onNavigatedFrom() +handleDeposit() +loadBalance() +loadHistory() }
+    class ChangePasswordController { -PasswordField currentPasswordField -PasswordField newPasswordField -PasswordField confirmPasswordField +onNavigatedTo() +handleChangePassword() }
+    class AdminPanelController { -TableView auctionTable -TableView userTable -TableView depositTable -TableView passwordResetTable +onNavigatedTo() +onNavigatedFrom() +handleRefresh() +handleSearch() +handleRefreshDeposits() +handleRefreshPasswordResets() +handleLogout() }
 
-    class WelcomeController {
-        +goToLoginAsAdmin()
-        +goToLoginAsBidder()
-        +goToLoginAsSeller()
-    }
-
-    class LoginController {
-        -TextField usernameField
-        -PasswordField passwordField
-        -String expectedRole
-        +onDataReceived(data)
-        +onNavigatedTo()
-        +onNavigatedFrom()
-        +handleLogin()
-        +goToRegister()
-        +goToForgotPassword()
-    }
-
-    class RegisterController {
-        -TextField usernameField
-        -TextField emailField
-        -PasswordField passwordField
-        -ComboBox roleCombo
-        +onNavigatedTo()
-        +handleRegister()
-        +goToLogin()
-    }
-
-    class AuctionListController {
-        -TableView auctionTable
-        -ObservableList auctions
-        -Timeline refreshTimeline
-        +onNavigatedTo()
-        +onNavigatedFrom()
-        +handleSearch()
-        +loadAuctions()
-        +handleBellClick()
-        +goToProfile()
-    }
-
-    class AuctionDetailController {
-        -Long auctionId
-        -AuctionResponse currentAuction
-        -WebSocketClient webSocketClient
-        -Timeline countdownTimeline
-        +onDataReceived(data)
-        +onNavigatedTo()
-        +onNavigatedFrom()
-        +handleBid()
-        +handleAutoBid()
-        +handleCancelAutoBid()
-        +loadAuctionDetail()
-    }
-
-    class CreateItemController {
-        -TextField nameField
-        -TextArea descriptionField
-        -ComboBox categoryCombo
-        +onNavigatedTo()
-        +handleCategoryChange()
-        +handleCreate()
-        +goBack()
-    }
-
-    class CreateAuctionController {
-        -ComboBox itemCombo
-        -TextField startingPriceField
-        -DatePicker startDatePicker
-        -DatePicker endDatePicker
-        +onNavigatedTo()
-        +handleCreate()
-        +goToCreateItem()
-        +goBack()
-    }
-
-    class ProfileController {
-        -Label usernameLabel
-        -Label roleLabel
-        -Label profileBalanceLabel
-        +onNavigatedTo()
-        +onNavigatedFrom()
-        +goToChangePassword()
-        +goToDeposit()
-        +handleLogout()
-    }
-
-    class DepositController {
-        -TextField amountField
-        -ListView historyList
-        -Timeline depositPollTimeline
-        +onNavigatedTo()
-        +onNavigatedFrom()
-        +handleDeposit()
-        +loadBalance()
-        +loadHistory()
-    }
-
-    class ChangePasswordController {
-        -PasswordField currentPasswordField
-        -PasswordField newPasswordField
-        -PasswordField confirmPasswordField
-        +onNavigatedTo()
-        +handleChangePassword()
-        +goBack()
-    }
-
-    class ForgotPasswordController {
-        -TextField emailField
-        -Button submitButton
-        +onNavigatedTo()
-        +handleSubmit()
-        +goBack()
-    }
-
-    class AdminPanelController {
-        -TableView auctionTable
-        -TableView userTable
-        -TableView depositTable
-        -TableView passwordResetTable
-        +onNavigatedTo()
-        +onNavigatedFrom()
-        +handleRefresh()
-        +handleSearch()
-        +handleRefreshDeposits()
-        +handleRefreshPasswordResets()
-        +handleLogout()
-    }
-
-    class RestClient {
-        -String BASE_URL
-        -HttpClient HTTP_CLIENT
-        -ObjectMapper MAPPER
-        +get(path)
-        +post(path,body)
-        +put(path,body)
-        +patch(path,body)
-        +delete(path)
-        +parse(json,clazz)
-        +parseList(json,clazz)
-    }
-
-    class WebSocketClient {
-        -WebSocket auctionSocket
-        -WebSocket userSocket
-        -String currentToken
-        -ScheduledExecutorService scheduler
-        +connect(auctionId,jwtToken,onMessage)
-        +connectUser(userId,jwtToken,onMessage)
-        +disconnectAuction()
-        +disconnectUser()
-        +disconnectAll()
-    }
-
-    class BackgroundBidWatcher {
-        -Map watchers
-        +getInstance()
-        +watch(auctionId,token,itemName,userId)
-        +stopWatching(auctionId)
-        +stopAll()
-    }
-
-    class UserBalanceWatcher {
-        -WebSocketClient wsClient
-        -BiConsumer onBalanceUpdate
-        +getInstance()
-        +connect(userId,token)
-        +disconnect()
-        +setOnBalanceUpdate(listener)
-    }
-
-    class NotificationStore {
-        -ObservableList notifications
-        -SimpleIntegerProperty unreadCount
-        +getInstance()
-        +add(String notification)
-        +add(NotificationItem item)
-        +markAllRead()
-        +clear()
-        +unreadCountProperty()
-    }
-
-    class NotificationItem {
-        -Long id
-        -String message
-        -String type
-        -boolean read
-        -LocalDateTime createdAt
-        +clientOnly(message)
-        +getMessage()
-        +isRead()
-        +setRead(read)
-    }
+    class RestClient { -String BASE_URL -HttpClient HTTP_CLIENT -ObjectMapper MAPPER +get(String path) +post(String path,Object body) +put(String path,Object body) +patch(String path,Object body) +delete(String path) +parse(String json,Class clazz) +parseList(String json,Class clazz) }
+    class WebSocketClient { -WebSocket auctionSocket -WebSocket userSocket -String currentToken -ScheduledExecutorService scheduler +connect(Long auctionId,String jwtToken,Consumer onMessage) +connectUser(Long userId,String jwtToken,Consumer onMessage) +disconnectAuction() +disconnectUser() +disconnectAll() }
+    class BackgroundBidWatcher { -Map watchers +getInstance() +watch(Long auctionId,String token,String itemName,Long userId) +stopWatching(Long auctionId) +stopAll() }
+    class UserBalanceWatcher { -WebSocketClient wsClient -BiConsumer onBalanceUpdate +getInstance() +connect(Long userId,String token) +disconnect() +setOnBalanceUpdate(BiConsumer listener) }
+    class NotificationStore { -ObservableList notifications -SimpleIntegerProperty unreadCount +getInstance() +add(String notification) +add(NotificationItem item) +markAllRead() +clear() +unreadCountProperty() }
+    class NotificationItem { -Long id -String message -String type -boolean read -LocalDateTime createdAt +clientOnly(String message) NotificationItem +getMessage() +isRead() +setRead(boolean read) }
+    class MoneyValidator { +requirePositiveIntegerVnd(BigDecimal amount,String fieldName) +isIntegerVnd(BigDecimal amount) boolean +toIntegerVndExact(BigDecimal amount,String fieldName) long }
+    class NotificationFormat { +USER_OPEN +USER_CLOSE +user(String username) String +auctionName(Long auctionId,String itemName) String }
 
     Launcher --> ClientApp
     ClientApp --> SceneManager
-    SceneManager --> Navigable : lifecycle callbacks
-    SceneManager --> NotificationStore : badge/session cleanup
-    SceneManager --> BackgroundBidWatcher : stopAll on logout
-    SceneManager --> UserBalanceWatcher : disconnect on logout
-
+    SceneManager --> Navigable
+    SceneManager --> NotificationStore
+    SceneManager --> BackgroundBidWatcher
+    SceneManager --> UserBalanceWatcher
     Navigable <|.. LoginController
     Navigable <|.. RegisterController
     Navigable <|.. ForgotPasswordController
@@ -1432,7 +980,6 @@ classDiagram
     Navigable <|.. DepositController
     Navigable <|.. ChangePasswordController
     Navigable <|.. AdminPanelController
-
     WelcomeController --> SceneManager
     LoginController --> RestClient
     LoginController --> SceneManager
@@ -1443,6 +990,7 @@ classDiagram
     ForgotPasswordController --> RestClient
     AuctionListController --> RestClient
     AuctionListController --> NotificationStore
+    AuctionListController --> NotificationFormat
     AuctionDetailController --> RestClient
     AuctionDetailController --> WebSocketClient
     AuctionDetailController --> BackgroundBidWatcher
