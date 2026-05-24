@@ -18,9 +18,10 @@ import org.jdbi.v3.core.statement.StatementContext;
  *
  * <h3>Ràng buộc một yêu cầu PENDING mỗi lúc</h3>
  *
- * <p>Mỗi user chỉ được có tối đa một yêu cầu PENDING tại một thời điểm. Kiểm tra này được thực hiện
- * ở service layer bằng cách gọi {@link #hasPendingRequest(Long)} trước khi insert. DAO không
- * enforce constraint này ở tầng database.
+ * <p>Mỗi user chỉ được có tối đa một yêu cầu PENDING tại một thời điểm. Service kiểm tra trước bằng
+ * {@link #hasPendingRequest(Long)} để trả lỗi thân thiện, và migration {@code
+ * V13__unique_pending_password_reset.sql} enforce lại bằng partial unique index ở tầng database để
+ * chống race condition.
  *
  * <h3>JOIN với bảng users</h3>
  *
@@ -35,6 +36,7 @@ import org.jdbi.v3.core.statement.StatementContext;
  *   <li><b>PasswordResetService.java</b> — gọi hasPendingRequest() + insert() khi user tạo yêu cầu,
  *       updateStatus() khi admin duyệt/từ chối
  *   <li><b>V1__initial_schema.sql</b> — định nghĩa bảng password_reset_requests
+ *   <li><b>V13__unique_pending_password_reset.sql</b> — enforce một PENDING request mỗi user
  * </ul>
  */
 public class PasswordResetRequestDao {
