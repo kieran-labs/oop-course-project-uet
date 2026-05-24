@@ -42,55 +42,38 @@
 | Port | `8080` must be free |
 | Database | No local PostgreSQL installation required; the server starts embedded PostgreSQL automatically |
 
-### 1. Download the release JARs
+### Run release JARs
 
-Download both files from the release page and place them in the same writable folder, for example `D:\auction-demo\`:
+Download both release JARs into the same folder:
 
 - `auction-server-1.0.0.jar`
 - `auction-client-1.0.0.jar`
 
-### 2. Start the server
-
-**Windows PowerShell:**
-
-```powershell
-cd D:\auction-demo
-$env:JWT_SECRET = "replace-with-a-random-secret-of-at-least-32-bytes"
-java -jar auction-server-1.0.0.jar
-```
-
-**cmd.exe:**
-
-```cmd
-cd /d D:\auction-demo
-set JWT_SECRET=replace-with-a-random-secret-of-at-least-32-bytes
-java -jar auction-server-1.0.0.jar
-```
-
-**macOS / Linux / Git Bash:**
+Start the server:
 
 ```bash
 export JWT_SECRET="replace-with-a-random-secret-of-at-least-32-bytes"
 java -jar auction-server-1.0.0.jar
 ```
 
-The server is ready when Javalin logs that it has started at `http://localhost:8080`.
+Windows PowerShell:
 
-### 3. Start one or more clients
+```powershell
+$env:JWT_SECRET = "replace-with-a-random-secret-of-at-least-32-bytes"
+java -jar auction-server-1.0.0.jar
+```
+
+Start one or more clients:
 
 ```bash
 java -jar auction-client-1.0.0.jar
 ```
 
-Run the client multiple times to test concurrent bidding and WebSocket updates.
-
-### 4. Default account
+Default admin account:
 
 | Role | Username | Password |
 |---|---|---|
 | Admin | `admin` | `123456` |
-
-Additional `SELLER` and `BIDDER` accounts can be created from the Register screen.
 
 ---
 
@@ -127,37 +110,30 @@ Core capabilities:
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    ClientApp["ClientApp / Launcher"]
-    SceneManager["SceneManager"]
-    UiControllers["JavaFX Controllers"]
-    RestClient["RestClient"]
-    WebSocketClient["WebSocketClient"]
-    App["App.java"]
-    JwtMiddleware["JwtMiddleware"]
-    Controllers["REST Controllers"]
-    WsHandler["AuctionWebSocketHandler"]
-    Services["Services"]
-    Patterns["Design Patterns"]
-    Daos["DAOs"]
-    Database[("PostgreSQL + Flyway")]
+The diagrams are intentionally rendered as a **left-to-right tree**: root objects stay on the left, and dependencies branch to the right.
 
-    ClientApp --> SceneManager
-    SceneManager --> UiControllers
-    UiControllers --> RestClient
-    UiControllers --> WebSocketClient
-    RestClient --> JwtMiddleware
-    WebSocketClient --> WsHandler
-    App --> JwtMiddleware
-    JwtMiddleware --> Controllers
-    App --> Controllers
+```mermaid
+flowchart LR
+    ClientApp["ClientApp / Launcher"] --> SceneManager["SceneManager"]
+    SceneManager --> UiControllers["JavaFX Controllers"]
+    UiControllers --> RestClient["RestClient"]
+    UiControllers --> WebSocketClient["WebSocketClient"]
+
+    RestClient --> JwtMiddleware["JwtMiddleware"]
+    WebSocketClient --> WsHandler["AuctionWebSocketHandler"]
+
+    App["App.java"] --> JwtMiddleware
+    App --> Controllers["REST Controllers"]
     App --> WsHandler
+    App --> Services["Services"]
+    App --> Scheduler["AuctionScheduler"]
+
+    JwtMiddleware --> Controllers
     Controllers --> Services
-    App --> Services
-    Services --> Patterns
-    Services --> Daos
-    Daos --> Database
+    Scheduler --> Services
+    Services --> Patterns["Design Patterns"]
+    Services --> Daos["DAOs"]
+    Daos --> Database[("PostgreSQL + Flyway")]
 ```
 
 ```text
@@ -180,7 +156,7 @@ src/main/java/com/auction
 
 ## Source-Code Coverage Audit for UML
 
-The diagrams below are split into vertical slices so GitHub's Mermaid renderer does not expand them too far horizontally. Endpoint paths are kept in Markdown tables, not inside `classDiagram` members, because Mermaid may fail on `/`, spaces, and `{id}` inside class bodies.
+Endpoint paths are kept in Markdown tables, not inside Mermaid `classDiagram` bodies, because GitHub Mermaid can fail on `/`, spaces, and `{id}` in class members.
 
 | Package | Files represented in UML |
 |---|---|
@@ -217,7 +193,7 @@ The diagrams below are split into vertical slices so GitHub's Mermaid renderer d
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
 
     class App {
         -SERVER_PORT
@@ -409,7 +385,7 @@ classDiagram
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
 
     class UserService {
         -userDao
@@ -612,7 +588,7 @@ classDiagram
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
 
     class Entity {
         <<abstract>>
@@ -642,9 +618,17 @@ classDiagram
         +setTokenVersion()
     }
 
-    class Admin { +getRole() }
-    class Seller { +getRole() }
-    class Bidder { +getRole() }
+    class Admin {
+        +getRole()
+    }
+
+    class Seller {
+        +getRole()
+    }
+
+    class Bidder {
+        +getRole()
+    }
 
     class Item {
         <<abstract>>
@@ -811,7 +795,7 @@ classDiagram
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
 
     class LoginRequest {
         -username
@@ -960,7 +944,7 @@ classDiagram
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
 
     class UserFactory {
         +create()
@@ -1069,7 +1053,7 @@ classDiagram
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
 
     class Launcher {
         +main()
@@ -1330,12 +1314,6 @@ gradlew.bat runClient
 
 ```bash
 ./gradlew clean buildJars
-```
-
-Windows:
-
-```cmd
-gradlew.bat clean buildJars
 ```
 
 Generated files:
