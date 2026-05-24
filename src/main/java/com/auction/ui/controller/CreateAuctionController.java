@@ -331,14 +331,13 @@ public class CreateAuctionController implements Navigable {
 
     picker
         .focusedProperty()
+        .addListener((obs, wasFocused, isFocused) -> animateDatePicker(picker, isFocused));
+    picker
+        .showingProperty()
         .addListener(
-            (obs, wasFocused, isFocused) ->
-                Platform.runLater(
-                    () -> {
-                      if (!picker.isShowing()) {
-                        animateDatePicker(picker, isFocused);
-                      }
-                    }));
+            (obs, wasShowing, isShowing) -> {
+              animateDatePicker(picker, isShowing);
+            });
   }
 
   private void animateDatePicker(DatePicker picker, boolean active) {
@@ -368,6 +367,9 @@ public class CreateAuctionController implements Navigable {
     picker.getProperties().put("glassCalendarState", state);
 
     picker.setDayCellFactory(dp -> new GlassDateCell(picker, state));
+    picker.valueProperty().addListener((obs, oldValue, newValue) -> state.refreshAll());
+    state.hoverProgress.addListener((obs, oldValue, newValue) -> state.refreshAll());
+    state.hoveredCell.addListener((obs, oldValue, newValue) -> state.refreshAll());
     picker
         .skinProperty()
         .addListener(
@@ -378,108 +380,9 @@ public class CreateAuctionController implements Navigable {
         .addListener(
             (obs, wasShowing, isShowing) -> {
               if (isShowing) {
-                ScaleTransition pulse =
-                    (ScaleTransition) picker.getProperties().get("datePickerPulse");
-                if (pulse != null) {
-                  pulse.stop();
-                }
-                picker.setScaleX(1.0);
-                picker.setScaleY(1.0);
                 applyPopupStyleWithRetry(picker, 3);
-                freezePopupAnchorWithRetry(picker, 5);
               }
             });
-  }
-
-  /**
-   * Capture the popup window's coordinates once it is stable, then forcibly hold them via an {@link
-   * javafx.animation.AnimationTimer} that runs every frame. This is more aggressive than a
-   * ChangeListener because it catches movements that happen between property writes and listener
-   * firings, and bypasses any property-binding shenanigans inside JavaFX's popup machinery. The
-   * visible symptom we are killing: the popup window slides 1-2px horizontally as the cursor moves
-   * across day cells, because picker.localToScreen() fluctuates as the picker's parent re-layouts
-   * on every cell-hover state change.
-   */
-  private void freezePopupAnchorWithRetry(DatePicker picker, int retries) {
-    if (retries <= 0 || !picker.isShowing()) {
-      LOGGER.info("[freeze] giving up: retries={} showing={}", retries, picker.isShowing());
-      return;
-    }
-    Platform.runLater(
-        () -> {
-          if (!picker.isShowing()) {
-            return;
-          }
-          if (!(picker.getSkin() instanceof DatePickerSkin skin)) {
-            freezePopupAnchorWithRetry(picker, retries - 1);
-            return;
-          }
-          Region popupContent = (Region) skin.getPopupContent();
-          if (popupContent == null || popupContent.getScene() == null) {
-            freezePopupAnchorWithRetry(picker, retries - 1);
-            return;
-          }
-          javafx.stage.Window window = popupContent.getScene().getWindow();
-          if (window == null) {
-            freezePopupAnchorWithRetry(picker, retries - 1);
-            return;
-          }
-          double x = window.getX();
-          double y = window.getY();
-          if (Double.isNaN(x) || Double.isNaN(y) || x <= 0 || y <= 0) {
-            freezePopupAnchorWithRetry(picker, retries - 1);
-            return;
-          }
-          LOGGER.info(
-              "[freeze] locking popup of class {} at x={} y={}", window.getClass().getName(), x, y);
-          applyWindowPositionLock(window, picker, x, y);
-        });
-  }
-
-  private void applyWindowPositionLock(
-      javafx.stage.Window window, DatePicker picker, double lockedX, double lockedY) {
-    if (Boolean.TRUE.equals(window.getProperties().get("popupPositionLocked"))) {
-      return;
-    }
-    window.getProperties().put("popupPositionLocked", Boolean.TRUE);
-
-    javafx.animation.AnimationTimer timer =
-        new javafx.animation.AnimationTimer() {
-          @Override
-          public void handle(long now) {
-            if (window.getX() != lockedX) {
-              window.setX(lockedX);
-            }
-            if (window.getY() != lockedY) {
-              window.setY(lockedY);
-            }
-            if (window instanceof javafx.stage.PopupWindow popup) {
-              if (popup.getAnchorX() != lockedX) {
-                popup.setAnchorX(lockedX);
-              }
-              if (popup.getAnchorY() != lockedY) {
-                popup.setAnchorY(lockedY);
-              }
-            }
-          }
-        };
-    timer.start();
-
-    javafx.beans.value.ChangeListener<Boolean> cleanup =
-        new javafx.beans.value.ChangeListener<>() {
-          @Override
-          public void changed(
-              javafx.beans.value.ObservableValue<? extends Boolean> obs,
-              Boolean wasShowing,
-              Boolean isShowing) {
-            if (!isShowing) {
-              timer.stop();
-              window.getProperties().remove("popupPositionLocked");
-              picker.showingProperty().removeListener(this);
-            }
-          }
-        };
-    picker.showingProperty().addListener(cleanup);
   }
 
   private void applyPopupStyleWithRetry(DatePicker picker, int attemptsRemaining) {
@@ -503,108 +406,8 @@ public class CreateAuctionController implements Navigable {
     if (!popup.getStyleClass().contains("auction-calendar-glass-popup")) {
       popup.getStyleClass().add("auction-calendar-glass-popup");
     }
-    lockPopupWidth(popup);
     return true;
   }
-
-  /**
-   * Lock popup width once it has been laid out. Without this, sub-pixel oscillations in the
-   * GridPane's preferred width (caused by per-cell {@code requestParentLayout()} during hover
-   * transitions) make ComboBoxPopupControl#reconfigurePopup re-anchor the popup horizontally each
-   * pulse — the visible 1-2px lateral jitter when the cursor moves across day cells.
-   */
-  private void lockPopupWidth(Region popup) {
-    if (popup.getProperties().containsKey("popupWidthLocked")) {
-      return;
-    }
-    Runnable apply =
-        () -> {
-          double width = popup.getWidth();
-          if (width <= 0) {
-            return;
-          }
-          popup.setMinWidth(width);
-          popup.setPrefWidth(width);
-          popup.setMaxWidth(width);
-          popup.getProperties().put("popupWidthLocked", Boolean.TRUE);
-        };
-    if (popup.getWidth() > 0) {
-      apply.run();
-      return;
-    }
-    popup
-        .widthProperty()
-        .addListener(
-            new javafx.beans.value.ChangeListener<Number>() {
-              @Override
-              public void changed(
-                  javafx.beans.value.ObservableValue<? extends Number> obs,
-                  Number oldValue,
-                  Number newValue) {
-                if (newValue != null && newValue.doubleValue() > 0) {
-                  popup.widthProperty().removeListener(this);
-                  apply.run();
-                }
-              }
-            });
-  }
-
-  private static final javafx.scene.layout.Border TRANSPARENT_CALENDAR_BORDER =
-      new javafx.scene.layout.Border(
-          new javafx.scene.layout.BorderStroke(
-              Color.TRANSPARENT,
-              javafx.scene.layout.BorderStrokeStyle.SOLID,
-              new CornerRadii(999),
-              new javafx.scene.layout.BorderWidths(1)));
-
-  private static final Color DEFAULT_TEXT_COLOR = Color.rgb(51, 65, 85);
-
-  private static final Background SELECTED_BG =
-      new Background(
-          new BackgroundFill(Color.rgb(35, 92, 226, 0.92), new CornerRadii(999), Insets.EMPTY),
-          new BackgroundFill(Color.rgb(16, 102, 204, 0.84), new CornerRadii(999), new Insets(1.1)));
-  private static final javafx.scene.layout.Border SELECTED_BORDER =
-      new javafx.scene.layout.Border(
-          new javafx.scene.layout.BorderStroke(
-              Color.rgb(255, 255, 255, 0.52),
-              javafx.scene.layout.BorderStrokeStyle.SOLID,
-              new CornerRadii(999),
-              new javafx.scene.layout.BorderWidths(1)));
-  private static final Background TODAY_BG =
-      new Background(
-          new BackgroundFill(Color.rgb(255, 255, 255, 0.20), new CornerRadii(999), Insets.EMPTY),
-          new BackgroundFill(
-              Color.rgb(191, 219, 254, 0.64), new CornerRadii(999), new Insets(1.1)));
-  private static final javafx.scene.layout.Border TODAY_BORDER =
-      new javafx.scene.layout.Border(
-          new javafx.scene.layout.BorderStroke(
-              Color.rgb(37, 99, 235, 0.68),
-              javafx.scene.layout.BorderStrokeStyle.SOLID,
-              new CornerRadii(999),
-              new javafx.scene.layout.BorderWidths(1)));
-  private static final Background SELECTED_TODAY_BG =
-      new Background(
-          new BackgroundFill(Color.rgb(31, 111, 235, 0.98), new CornerRadii(999), Insets.EMPTY),
-          new BackgroundFill(Color.rgb(15, 95, 184, 0.94), new CornerRadii(999), new Insets(1.1)));
-  private static final javafx.scene.layout.Border SELECTED_TODAY_BORDER =
-      new javafx.scene.layout.Border(
-          new javafx.scene.layout.BorderStroke(
-              Color.rgb(255, 255, 255, 0.70),
-              javafx.scene.layout.BorderStrokeStyle.SOLID,
-              new CornerRadii(999),
-              new javafx.scene.layout.BorderWidths(1)));
-  private static final Background HOVERED_BG =
-      new Background(
-          new BackgroundFill(Color.rgb(255, 255, 255, 0.18), new CornerRadii(999), Insets.EMPTY),
-          new BackgroundFill(
-              Color.rgb(191, 219, 254, 0.72), new CornerRadii(999), new Insets(1.1)));
-  private static final javafx.scene.layout.Border HOVERED_BORDER =
-      new javafx.scene.layout.Border(
-          new javafx.scene.layout.BorderStroke(
-              Color.rgb(96, 165, 250, 0.46),
-              javafx.scene.layout.BorderStrokeStyle.SOLID,
-              new CornerRadii(999),
-              new javafx.scene.layout.BorderWidths(1)));
 
   private final class GlassDateCell extends DateCell {
     private final DatePicker picker;
@@ -615,15 +418,14 @@ public class CreateAuctionController implements Navigable {
       this.picker = picker;
       this.state = state;
       setFocusTraversable(false);
-      shadow.setColor(Color.rgb(21, 101, 192, 0.12));
-      shadow.setRadius(8);
-      shadow.setOffsetY(1.0);
-
-      // Lock cell size so the GridPane can't recompute column widths on hover. Without this, every
-      // setBackground/setBorder on a cell triggers requestParentLayout on the GridPane; floating-
-      // point rounding in the recomputed column widths shifts all cells to the right of the hovered
-      // column sub-pixel — visible most strongly when the cursor is in the leftmost columns.
-      Platform.runLater(this::lockSize);
+      // Shadow is permanently attached. Radius/offset are constants so the cell's effect-extended
+      // bounds never change. Per-hover visual is achieved by mutating shadow.color (paint-only) —
+      // setEffect is never called again, so neighboring cells never see a bounds invalidation when
+      // hover crosses cell boundaries (which previously caused the popup to jump).
+      shadow.setColor(Color.TRANSPARENT);
+      shadow.setRadius(14);
+      shadow.setOffsetY(1.2);
+      setEffect(shadow);
 
       hoverProperty()
           .addListener(
@@ -633,28 +435,18 @@ public class CreateAuctionController implements Navigable {
                   animateHover(state, 1.0);
                 } else if (state.hoveredCell.get() == this) {
                   animateHover(state, 0.0);
+                  Platform.runLater(
+                      () -> {
+                        if (!isHover() && state.hoveredCell.get() == this) {
+                          state.hoveredCell.set(null);
+                        }
+                      });
                 }
               });
 
       state.hoveredCell.addListener((obs, oldValue, newValue) -> refreshAppearance());
       state.hoverProgress.addListener((obs, oldValue, newValue) -> refreshAppearance());
       picker.valueProperty().addListener((obs, oldValue, newValue) -> refreshAppearance());
-    }
-
-    private void lockSize() {
-      if (getProperties().containsKey("sizeLocked")) {
-        return;
-      }
-      double w = getWidth();
-      double h = getHeight();
-      if (w <= 0 || h <= 0) {
-        Platform.runLater(this::lockSize);
-        return;
-      }
-      setMinSize(w, h);
-      setPrefSize(w, h);
-      setMaxSize(w, h);
-      getProperties().put("sizeLocked", Boolean.TRUE);
     }
 
     @Override
@@ -673,6 +465,10 @@ public class CreateAuctionController implements Navigable {
         new javafx.beans.property.SimpleObjectProperty<>(null);
     private final DoubleProperty hoverProgress = new SimpleDoubleProperty(0.0);
     private final Timeline hoverTimeline = new Timeline();
+
+    private void refreshAll() {
+      // Cells listen directly to hoverProgress/hoveredCell/picker.valueProperty.
+    }
   }
 
   private void animateHover(GlassCalendarState state, double target) {
@@ -688,19 +484,72 @@ public class CreateAuctionController implements Navigable {
             new KeyFrame(
                 Duration.millis(target > state.hoverProgress.get() ? 185 : 145),
                 new KeyValue(state.hoverProgress, target, Interpolator.EASE_BOTH)));
-    if (target == 0.0) {
-      DateCell leaving = state.hoveredCell.get();
-      state.hoverTimeline.setOnFinished(
-          e -> {
-            if (state.hoveredCell.get() == leaving) {
-              state.hoveredCell.set(null);
-            }
-          });
-    } else {
-      state.hoverTimeline.setOnFinished(null);
-    }
     state.hoverTimeline.playFromStart();
   }
+
+  // Cached cell styles. KEY INSIGHT: setBackground/setBorder with a different object reference
+  // triggers Region.backgroundProperty.invalidated() → requestParentLayout() → propagates up
+  // GridPane → popupContent.layoutBoundsProperty change → ComboBoxPopupControl's popupListener
+  // fires picker.requestLayout() → reconfigurePopup() → popup window jumps. To eliminate the
+  // jitter on mouse hover, the cell background/border MUST NOT change on hover state transitions.
+  // We only swap backgrounds for selected/today (which are stable states). Hover is signaled via
+  // shadow effect + opacity, both of which are paint-dirty only and never invalidate layout.
+  private static final Color DEFAULT_CELL_TEXT = Color.rgb(51, 65, 85);
+  private static final Color TODAY_TEXT = Color.rgb(14, 91, 181);
+  private static final Color HOVER_TEXT = Color.rgb(15, 23, 42);
+
+  private static final javafx.scene.layout.Border TRANSPARENT_CELL_BORDER =
+      new javafx.scene.layout.Border(
+          new javafx.scene.layout.BorderStroke(
+              Color.TRANSPARENT,
+              javafx.scene.layout.BorderStrokeStyle.SOLID,
+              new CornerRadii(999),
+              new javafx.scene.layout.BorderWidths(1)));
+
+  private static final Background SELECTED_CELL_BG =
+      new Background(
+          new BackgroundFill(Color.rgb(35, 92, 226, 0.92), new CornerRadii(999), Insets.EMPTY),
+          new BackgroundFill(Color.rgb(16, 102, 204, 0.84), new CornerRadii(999), new Insets(1.1)));
+  private static final javafx.scene.layout.Border SELECTED_CELL_BORDER =
+      new javafx.scene.layout.Border(
+          new javafx.scene.layout.BorderStroke(
+              Color.rgb(255, 255, 255, 0.52),
+              javafx.scene.layout.BorderStrokeStyle.SOLID,
+              new CornerRadii(999),
+              new javafx.scene.layout.BorderWidths(1)));
+
+  private static final Background TODAY_CELL_BG =
+      new Background(
+          new BackgroundFill(Color.rgb(255, 255, 255, 0.20), new CornerRadii(999), Insets.EMPTY),
+          new BackgroundFill(
+              Color.rgb(191, 219, 254, 0.64), new CornerRadii(999), new Insets(1.1)));
+  private static final javafx.scene.layout.Border TODAY_CELL_BORDER =
+      new javafx.scene.layout.Border(
+          new javafx.scene.layout.BorderStroke(
+              Color.rgb(37, 99, 235, 0.68),
+              javafx.scene.layout.BorderStrokeStyle.SOLID,
+              new CornerRadii(999),
+              new javafx.scene.layout.BorderWidths(1)));
+
+  private static final Background SELECTED_TODAY_CELL_BG =
+      new Background(
+          new BackgroundFill(Color.rgb(31, 111, 235, 0.98), new CornerRadii(999), Insets.EMPTY),
+          new BackgroundFill(Color.rgb(15, 95, 184, 0.94), new CornerRadii(999), new Insets(1.1)));
+  private static final javafx.scene.layout.Border SELECTED_TODAY_CELL_BORDER =
+      new javafx.scene.layout.Border(
+          new javafx.scene.layout.BorderStroke(
+              Color.rgb(255, 255, 255, 0.70),
+              javafx.scene.layout.BorderStrokeStyle.SOLID,
+              new CornerRadii(999),
+              new javafx.scene.layout.BorderWidths(1)));
+
+  // Cached shadow tints. shadow.setColor(SAME_REF) is a no-op in JavaFX (StyleableObjectProperty
+  // identity check), so the per-hover refresh is genuinely free for the most common states.
+  private static final Color SHADOW_HIDDEN = Color.TRANSPARENT;
+  private static final Color SHADOW_HOVER = Color.rgb(21, 101, 192, 0.36);
+  private static final Color SHADOW_SELECTED = Color.rgb(21, 101, 192, 0.32);
+  private static final Color SHADOW_TODAY = Color.rgb(21, 101, 192, 0.20);
+  private static final Color SHADOW_SELECTED_TODAY = Color.rgb(21, 101, 192, 0.40);
 
   private void applyDayCellStyle(
       DateCell cell, DatePicker picker, GlassCalendarState state, DropShadow shadow) {
@@ -725,51 +574,58 @@ public class CreateAuctionController implements Navigable {
         previousMonth
             || nextMonth
             || (picker.getValue() != null && item.getMonth() != picker.getValue().getMonth());
-    double hover = state.hoverProgress.get();
 
-    Color text = DEFAULT_TEXT_COLOR;
-    double opacity = 1.0;
-
+    // Background/border: pick from cached constants. Same-reference setBackground/setBorder is a
+    // no-op in JavaFX (ObjectPropertyBase.set checks identity), so per-hover refreshAppearance
+    // calls become free as long as no background-affecting state actually changed.
+    Background bg;
+    javafx.scene.layout.Border bd;
+    Color text;
     if (selected && today) {
-      cell.setBackground(SELECTED_TODAY_BG);
-      cell.setBorder(SELECTED_TODAY_BORDER);
-      shadow.setColor(Color.rgb(21, 101, 192, 0.36));
-      shadow.setRadius(12);
-      shadow.setOffsetY(1.0);
-      cell.setEffect(shadow);
+      bg = SELECTED_TODAY_CELL_BG;
+      bd = SELECTED_TODAY_CELL_BORDER;
       text = Color.WHITE;
     } else if (selected) {
-      cell.setBackground(SELECTED_BG);
-      cell.setBorder(SELECTED_BORDER);
-      shadow.setColor(Color.rgb(21, 101, 192, 0.30 + hover * 0.06));
-      shadow.setRadius(12);
-      shadow.setOffsetY(1.0);
-      cell.setEffect(shadow);
+      bg = SELECTED_CELL_BG;
+      bd = SELECTED_CELL_BORDER;
       text = Color.WHITE;
     } else if (today) {
-      cell.setBackground(TODAY_BG);
-      cell.setBorder(TODAY_BORDER);
-      shadow.setColor(Color.rgb(21, 101, 192, 0.18 + hover * 0.04));
-      shadow.setRadius(10);
-      shadow.setOffsetY(1.0);
-      cell.setEffect(shadow);
-      text = Color.rgb(14, 91, 181);
-    } else if (isHovered && hover > 0.001) {
-      cell.setBackground(HOVERED_BG);
-      cell.setBorder(HOVERED_BORDER);
-      shadow.setColor(Color.rgb(21, 101, 192, 0.36 * hover));
-      shadow.setRadius(16);
-      shadow.setOffsetY(1.4);
-      cell.setEffect(shadow);
-      text = Color.rgb(15, 23, 42);
+      bg = TODAY_CELL_BG;
+      bd = TODAY_CELL_BORDER;
+      text = TODAY_TEXT;
     } else {
-      cell.setBackground(Background.EMPTY);
-      cell.setBorder(TRANSPARENT_CALENDAR_BORDER);
-      cell.setEffect(null);
-      if (!isHovered && outOfMonth) {
-        opacity = hasHover ? (0.45 + 0.10 * (1.0 - hover)) : 0.55;
-      } else if (!isHovered && hasHover) {
-        opacity = 0.58 + (0.42 * (1.0 - hover));
+      bg = Background.EMPTY;
+      bd = TRANSPARENT_CELL_BORDER;
+      text = isHovered ? HOVER_TEXT : DEFAULT_CELL_TEXT;
+    }
+    cell.setBackground(bg);
+    cell.setBorder(bd);
+
+    // Shadow color: cached constants so setColor with same reference is a no-op. Radius/offset
+    // were set once at construction and never mutated again — this keeps the cell's effect-bounds
+    // stable so hover transitions cannot trigger any bounds-related layout invalidation.
+    Color shadowColor;
+    if (selected && today) {
+      shadowColor = SHADOW_SELECTED_TODAY;
+    } else if (selected) {
+      shadowColor = SHADOW_SELECTED;
+    } else if (today) {
+      shadowColor = SHADOW_TODAY;
+    } else if (isHovered) {
+      shadowColor = SHADOW_HOVER;
+    } else {
+      shadowColor = SHADOW_HIDDEN;
+    }
+    shadow.setColor(shadowColor);
+
+    // Opacity: dims non-hovered cells when something is hovered, and out-of-month cells. Pure
+    // paint property — no layout impact.
+    double opacity = 1.0;
+    if (!selected && !today && !isHovered) {
+      if (outOfMonth) {
+        opacity = hasHover ? 0.45 : 0.55;
+      } else if (hasHover) {
+        opacity = 0.58;
       }
     }
 
