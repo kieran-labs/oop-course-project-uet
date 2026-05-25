@@ -229,7 +229,18 @@ public class AutoBidStrategy {
     }
 
     if (autoBidCount >= MAX_AUTO_BIDS_PER_TRIGGER) {
-      LOGGER.warn("Đạt giới hạn {} auto-bid cho phiên #{}", MAX_AUTO_BIDS_PER_TRIGGER, auctionId);
+      for (AutoBidConfig initialConfig : activeConfigs) {
+        AutoBidConfig config = autoBidConfigDao.findById(initialConfig.getId()).orElse(null);
+        if (config != null && config.isActive()) {
+          config.setStatus(AutoBidStatus.FAILED);
+          config.setFailureReason(AutoBidFailureReason.CHAIN_LIMIT_REACHED);
+          autoBidConfigDao.update(config);
+        }
+      }
+      LOGGER.warn(
+          "Auto-bid chain reached limit {} for auction #{}; active configurations were stopped",
+          MAX_AUTO_BIDS_PER_TRIGGER,
+          auctionId);
     }
   }
 
@@ -386,7 +397,32 @@ public class AutoBidStrategy {
     }
 
     if (autoBidCount >= MAX_AUTO_BIDS_PER_TRIGGER) {
-      LOGGER.warn("Đạt giới hạn {} auto-bid cho phiên #{}", MAX_AUTO_BIDS_PER_TRIGGER, auctionId);
+      for (AutoBidConfig initialConfig : activeConfigs) {
+        AutoBidConfig config =
+            autoBidConfigDao.findByIdInTransaction(handle, initialConfig.getId()).orElse(null);
+        if (config == null || !config.isActive()) {
+          continue;
+        }
+        config.setStatus(AutoBidStatus.FAILED);
+        config.setFailureReason(AutoBidFailureReason.CHAIN_LIMIT_REACHED);
+        autoBidConfigDao.updateStatusInTransaction(handle, config);
+        handle.execute(
+            "INSERT INTO notifications (user_id, message, notification_type)"
+                + " VALUES (?, ?, 'AUTOBID_FAILED')",
+            config.getBidderId(),
+            String.format(
+                Locale.GERMANY,
+                "Your auto-bid for auction #%d was stopped after %d consecutive automatic bids."
+                    + " Current price: %,d VND. Raise the increment or restart auto-bid if needed.",
+                auctionId,
+                MAX_AUTO_BIDS_PER_TRIGGER,
+                toIntegerVnd(currentPrice, "Current price")));
+      }
+      LOGGER.warn(
+          "Auto-bid chain reached limit {} for auction #{} at price {}; active configurations were stopped",
+          MAX_AUTO_BIDS_PER_TRIGGER,
+          auctionId,
+          currentPrice);
     }
   }
 

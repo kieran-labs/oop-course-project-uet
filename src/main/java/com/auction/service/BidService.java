@@ -467,7 +467,9 @@ public class BidService {
                     (h, aid, bid, amt) ->
                         executeChainBidInHandle(h, aid, bid, amt, postCommitEvents));
 
-                return config;
+                return autoBidConfigDao
+                    .findByIdInTransaction(handle, config.getId())
+                    .orElse(config);
               });
 
       postCommitEvents.forEach(Runnable::run);

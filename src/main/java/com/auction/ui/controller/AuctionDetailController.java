@@ -13,6 +13,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.math.BigDecimal;
 import java.net.http.HttpResponse;
 import java.text.NumberFormat;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -91,6 +93,8 @@ public class AuctionDetailController implements Navigable {
   private static final String CATEGORY_ELECTRONICS_COLOR = "#1D4ED8";
   private static final String CATEGORY_VEHICLE_COLOR = "#374151";
   private static final String CATEGORY_ART_COLOR = "#EA580C";
+  private static final Duration AUTO_BID_PLAYBACK_INTERVAL = Duration.millis(40);
+  private static final Duration AUTO_BID_TERMINAL_DELAY = Duration.millis(650);
 
   private static String vnd(java.math.BigDecimal v) {
     return v == null ? "?" : VND_FMT.format(v) + " VND";
@@ -189,9 +193,19 @@ public class AuctionDetailController implements Navigable {
   private BigDecimal currentPriceValue;
   private Timeline balancePollTimeline;
   private RotateTransition autoBidSpinnerTransition;
+  private Timeline realtimeRefreshTimeline;
+  private Timeline autoBidPlaybackTimeline;
+  private Timeline autoBidTerminalStateTimeline;
+  private final Deque<BidUpdateMessage> queuedAutoBidUpdates = new ArrayDeque<>();
+  private AutoBidUiState deferredAutoBidTerminalState;
 
   /** Last seen auto-bid status — used to detect transitions and surface a notification once. */
   private String lastAutoBidStatus;
+
+  private long autoBidStateRequestSequence;
+
+  private record AutoBidUiState(
+      String status, String reason, BigDecimal maxBid, BigDecimal increment) {}
 
   private final WebSocketClient wsClient = new WebSocketClient();
   private final ObservableList<String> bidHistoryItems = FXCollections.observableArrayList();
@@ -513,6 +527,16 @@ public class AuctionDetailController implements Navigable {
       notificationTimeline.stop();
       notificationTimeline = null;
     }
+    if (realtimeRefreshTimeline != null) {
+      realtimeRefreshTimeline.stop();
+      realtimeRefreshTimeline = null;
+    }
+    stopAutoBidPlayback();
+    if (autoBidTerminalStateTimeline != null) {
+      autoBidTerminalStateTimeline.stop();
+      autoBidTerminalStateTimeline = null;
+    }
+    deferredAutoBidTerminalState = null;
     stopAutoBidSpinner();
     leftScrollPane.prefWidthProperty().unbind();
     rightColumn.prefWidthProperty().unbind();
@@ -671,6 +695,8 @@ public class AuctionDetailController implements Navigable {
     }
 
     autoBidButton.setDisable(true);
+    startAutoBidSpinner();
+    showAutoBidMessage("Auto-bid is processing bids...", "#16A34A");
     Map<String, Object> body = new HashMap<>();
     body.put("maxBid", maxBid);
     body.put("increment", increment);
@@ -691,6 +717,7 @@ public class AuctionDetailController implements Navigable {
                       if (response.statusCode() == 200 || response.statusCode() == 201) {
                         applyAutoBidStateFromJson(response.body());
                       } else {
+                        stopAndHideAutoBidSpinner();
                         String err = extractErrorMessage(response.body());
                         showAutoBidMessage(
                             err != null && !err.isBlank()
@@ -706,6 +733,7 @@ public class AuctionDetailController implements Navigable {
                       if (!autoBidAuctionId.equals(auctionId)) {
                         return;
                       }
+                      stopAndHideAutoBidSpinner();
                       autoBidButton.setDisable(false);
                       showAutoBidMessage("Unable to reach the server.", "#DC2626");
                     });
@@ -759,6 +787,7 @@ public class AuctionDetailController implements Navigable {
     if (currentAuctionId == null) {
       return;
     }
+    final long requestSequence = ++autoBidStateRequestSequence;
     Thread.ofVirtual()
         .start(
             () -> {
@@ -771,7 +800,8 @@ public class AuctionDetailController implements Navigable {
                 final String body = response.body();
                 Platform.runLater(
                     () -> {
-                      if (currentAuctionId.equals(auctionId)) {
+                      if (currentAuctionId.equals(auctionId)
+                          && requestSequence == autoBidStateRequestSequence) {
                         applyAutoBidStateFromJson(body);
                       }
                     });
@@ -802,7 +832,7 @@ public class AuctionDetailController implements Navigable {
       BigDecimal maxBid = node.hasNonNull("maxBid") ? node.get("maxBid").decimalValue() : null;
       BigDecimal increment =
           node.hasNonNull("increment") ? node.get("increment").decimalValue() : null;
-      applyAutoBidState(status, reason, maxBid, increment);
+      applyOrDeferAutoBidState(new AutoBidUiState(status, reason, maxBid, increment));
     } catch (Exception e) {
       LOGGER.debug("Không thể parse auto-bid state: {}", e.getMessage());
     }
@@ -841,6 +871,8 @@ public class AuctionDetailController implements Navigable {
                 + " and was stopped.";
       } else if ("INSUFFICIENT_BALANCE".equals(reason)) {
         text = itemLabel + "Auto-bid stopped: balance is too low to continue.";
+      } else if ("CHAIN_LIMIT_REACHED".equals(reason)) {
+        text = itemLabel + "Auto-bid stopped after too many consecutive automatic bids.";
       } else {
         text = itemLabel + "Auto-bid was stopped automatically.";
       }
@@ -897,11 +929,18 @@ public class AuctionDetailController implements Navigable {
       if (increment != null) {
         incrementField.setText(increment.stripTrailingZeros().toPlainString());
       }
-      String msg =
-          "INSUFFICIENT_BALANCE".equals(reason)
-              ? "Auto-bid stopped: available balance isn't enough to continue."
-                  + " Top up your wallet and turn it back on."
-              : "Auto-bid stopped due to an error" + (reason != null ? " (" + reason + ")." : ".");
+      String msg;
+      if ("INSUFFICIENT_BALANCE".equals(reason)) {
+        msg =
+            "Auto-bid stopped: available balance isn't enough to continue."
+                + " Top up your wallet and turn it back on.";
+      } else if ("CHAIN_LIMIT_REACHED".equals(reason)) {
+        msg =
+            "Auto-bid stopped after 100 consecutive automatic bids."
+                + " Adjust the bid settings and turn it back on.";
+      } else {
+        msg = "Auto-bid stopped due to an error" + (reason != null ? " (" + reason + ")." : ".");
+      }
       showAutoBidMessage(msg, "#DC2626");
     } else if ("STOPPED".equals(status)) {
       maxBidField.clear();
@@ -942,6 +981,14 @@ public class AuctionDetailController implements Navigable {
     }
     if (autoBidSpinner != null) {
       autoBidSpinner.setRotate(0);
+    }
+  }
+
+  private void stopAndHideAutoBidSpinner() {
+    stopAutoBidSpinner();
+    if (autoBidSpinner != null) {
+      autoBidSpinner.setVisible(false);
+      autoBidSpinner.setManaged(false);
     }
   }
 
@@ -1183,22 +1230,10 @@ public class AuctionDetailController implements Navigable {
     }
     switch (msg.getType()) {
       case BidUpdateMessage.TYPE_BID_UPDATE -> {
-        if (msg.getCurrentPrice() != null) {
-          currentPriceValue = msg.getCurrentPrice();
-          currentPriceLabel.setText(vnd(msg.getCurrentPrice()));
-          appendPriceHistoryPoint(auctionId, msg.getCurrentPrice().doubleValue());
-        }
-        if (msg.getLeadingBidderUsername() != null) {
-          setLeadingBidderText(msg.getLeadingBidderUsername());
-        }
-        if (msg.getEndTime() != null) {
-          applyEndTimeUpdate(msg.getEndTime());
-        }
-        showBidNotification(msg);
-        loadBidHistory();
-        // Re-check autobid state — chain bidding may have changed our config to EXHAUSTED/FAILED
-        if ("BIDDER".equals(SceneManager.getInstance().getCurrentRole())) {
-          loadAutoBidState();
+        if (msg.isAutoBid() || autoBidPlaybackTimeline != null || !queuedAutoBidUpdates.isEmpty()) {
+          enqueueAutoBidUpdate(msg);
+        } else {
+          renderBidUpdate(msg);
         }
       }
       case BidUpdateMessage.TYPE_TIME_EXTENDED -> {
@@ -1208,6 +1243,12 @@ public class AuctionDetailController implements Navigable {
         }
       }
       case BidUpdateMessage.TYPE_AUCTION_ENDED -> {
+        stopAutoBidPlayback();
+        deferredAutoBidTerminalState = null;
+        if (autoBidTerminalStateTimeline != null) {
+          autoBidTerminalStateTimeline.stop();
+          autoBidTerminalStateTimeline = null;
+        }
         stopCountdown();
         markCountdownEnded();
         setTimerHeader(false);
@@ -1227,6 +1268,120 @@ public class AuctionDetailController implements Navigable {
       }
       default -> LOGGER.debug("WS message không xử lý: type={}", msg.getType());
     }
+  }
+
+  private void renderBidUpdate(BidUpdateMessage msg) {
+    if (msg.getCurrentPrice() != null) {
+      currentPriceValue = msg.getCurrentPrice();
+      currentPriceLabel.setText(vnd(msg.getCurrentPrice()));
+      appendPriceHistoryPoint(auctionId, msg.getCurrentPrice().doubleValue());
+    }
+    if (msg.getLeadingBidderUsername() != null) {
+      setLeadingBidderText(msg.getLeadingBidderUsername());
+    }
+    if (msg.getEndTime() != null) {
+      applyEndTimeUpdate(msg.getEndTime());
+    }
+    showBidNotification(msg);
+    scheduleRealtimeRefresh();
+  }
+
+  private void enqueueAutoBidUpdate(BidUpdateMessage msg) {
+    queuedAutoBidUpdates.offer(msg);
+    if (autoBidTerminalStateTimeline != null) {
+      autoBidTerminalStateTimeline.stop();
+      autoBidTerminalStateTimeline = null;
+    }
+    if (autoBidPlaybackTimeline != null) {
+      return;
+    }
+    startAutoBidPlayback();
+  }
+
+  private void startAutoBidPlayback() {
+    autoBidPlaybackTimeline =
+        new Timeline(new KeyFrame(AUTO_BID_PLAYBACK_INTERVAL, e -> renderNextAutoBidUpdate()));
+    autoBidPlaybackTimeline.setCycleCount(Timeline.INDEFINITE);
+    autoBidPlaybackTimeline.play();
+  }
+
+  private void renderNextAutoBidUpdate() {
+    BidUpdateMessage next = queuedAutoBidUpdates.poll();
+    if (next != null) {
+      renderBidUpdate(next);
+    }
+    if (queuedAutoBidUpdates.isEmpty()) {
+      stopAutoBidPlayback();
+      scheduleDeferredAutoBidTerminalState();
+    }
+  }
+
+  private void stopAutoBidPlayback() {
+    if (autoBidPlaybackTimeline != null) {
+      autoBidPlaybackTimeline.stop();
+      autoBidPlaybackTimeline = null;
+    }
+    queuedAutoBidUpdates.clear();
+  }
+
+  private void applyOrDeferAutoBidState(AutoBidUiState state) {
+    if (!"CHAIN_LIMIT_REACHED".equals(state.reason())) {
+      applyAutoBidState(state.status(), state.reason(), state.maxBid(), state.increment());
+      return;
+    }
+    deferredAutoBidTerminalState = state;
+    scheduleDeferredAutoBidTerminalState();
+  }
+
+  private void scheduleDeferredAutoBidTerminalState() {
+    if (deferredAutoBidTerminalState == null || !queuedAutoBidUpdates.isEmpty()) {
+      return;
+    }
+    if (autoBidTerminalStateTimeline != null) {
+      autoBidTerminalStateTimeline.stop();
+    }
+    autoBidTerminalStateTimeline =
+        new Timeline(
+            new KeyFrame(
+                AUTO_BID_TERMINAL_DELAY,
+                e -> {
+                  if (!queuedAutoBidUpdates.isEmpty()) {
+                    return;
+                  }
+                  AutoBidUiState terminalState = deferredAutoBidTerminalState;
+                  deferredAutoBidTerminalState = null;
+                  autoBidTerminalStateTimeline = null;
+                  if (terminalState != null) {
+                    applyAutoBidState(
+                        terminalState.status(),
+                        terminalState.reason(),
+                        terminalState.maxBid(),
+                        terminalState.increment());
+                  }
+                }));
+    autoBidTerminalStateTimeline.play();
+  }
+
+  /**
+   * Coalesce fetches caused by a fast auto-bid chain. Prices render immediately from WebSocket
+   * events, while history and persisted auto-bid status are fetched once after the burst settles.
+   */
+  private void scheduleRealtimeRefresh() {
+    if (realtimeRefreshTimeline != null) {
+      realtimeRefreshTimeline.stop();
+    }
+    realtimeRefreshTimeline =
+        new Timeline(
+            new KeyFrame(
+                Duration.millis(150),
+                e -> {
+                  realtimeRefreshTimeline = null;
+                  loadBidHistory();
+                  if ("BIDDER".equals(SceneManager.getInstance().getCurrentRole())) {
+                    loadAutoBidState();
+                  }
+                }));
+    realtimeRefreshTimeline.play();
   }
 
   // ========== NOTIFICATION ==========

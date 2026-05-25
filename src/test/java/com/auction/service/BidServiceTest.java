@@ -825,6 +825,23 @@ class BidServiceTest {
 
     @Test
     @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Response returns terminal config state changed by the in-transaction chain")
+    void createAutoBid_returnsFinalPersistedStateAfterChain() {
+      AutoBidConfig stopped = new AutoBidConfig(AUCTION_ID, BIDDER_ID, MAX_BID, STEP);
+      stopped.setId(99L);
+      stopped.setStatus(AutoBidStatus.FAILED);
+      stopped.setFailureReason(AutoBidFailureReason.CHAIN_LIMIT_REACHED);
+      when(autoBidConfigDao.findByIdInTransaction(mockHandle, 99L))
+          .thenReturn(Optional.of(stopped));
+
+      AutoBidConfig result = bidService.createAutoBid(AUCTION_ID, BIDDER_ID, MAX_BID, STEP);
+
+      assertEquals(AutoBidStatus.FAILED, result.getStatus());
+      assertEquals(AutoBidFailureReason.CHAIN_LIMIT_REACHED, result.getFailureReason());
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
     @DisplayName("Bidder là current leader → reject với InvalidBidException")
     void createAutoBid_currentLeader_rejected() {
       Auction auction = runningAuction();
@@ -1223,6 +1240,45 @@ class BidServiceTest {
                     prevAmount[0] = amount;
                     return new BidTransaction(auctionId, bidderId, amount, true);
                   }));
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:MethodName")
+    @DisplayName("Two bidders reaching the 100-bid guard are stopped with a terminal status")
+    void twoBiddersAtSafetyLimit_areMarkedFailed() {
+      AutoBidConfig cfgA = config(10L, BIDDER_ID, new BigDecimal("999999999"), BigDecimal.ONE, 0);
+      AutoBidConfig cfgB = config(11L, BIDDER_B_ID, new BigDecimal("999999999"), BigDecimal.ONE, 1);
+
+      when(autoBidConfigDao.findActiveByAuctionIdInTransaction(mockHandle, AUCTION_ID))
+          .thenReturn(List.of(cfgA, cfgB));
+      when(autoBidConfigDao.findByIdInTransaction(mockHandle, 10L))
+          .thenAnswer(inv -> Optional.of(cfgA));
+      when(autoBidConfigDao.findByIdInTransaction(mockHandle, 11L))
+          .thenAnswer(inv -> Optional.of(cfgB));
+
+      AutoBidStrategy strategy = realStrategy();
+      final int[] bidCount = {0};
+
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(5),
+          () ->
+              strategy.executeAllInTransaction(
+                  mockHandle,
+                  AUCTION_ID,
+                  new BigDecimal("1500000"),
+                  99L,
+                  (h, auctionId, bidderId, amount) -> {
+                    bidCount[0]++;
+                    return new BidTransaction(auctionId, bidderId, amount, true);
+                  }));
+
+      assertEquals(AutoBidStrategy.MAX_AUTO_BIDS_PER_TRIGGER, bidCount[0]);
+      assertEquals(AutoBidStatus.FAILED, cfgA.getStatus());
+      assertEquals(AutoBidStatus.FAILED, cfgB.getStatus());
+      assertEquals(AutoBidFailureReason.CHAIN_LIMIT_REACHED, cfgA.getFailureReason());
+      assertEquals(AutoBidFailureReason.CHAIN_LIMIT_REACHED, cfgB.getFailureReason());
+      verify(autoBidConfigDao, atLeast(2))
+          .updateStatusInTransaction(eq(mockHandle), any(AutoBidConfig.class));
     }
   }
 }
