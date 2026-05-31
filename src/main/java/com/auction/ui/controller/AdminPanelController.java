@@ -20,6 +20,7 @@ import java.util.Locale;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -32,6 +33,7 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -547,7 +549,7 @@ public class AdminPanelController implements Navigable {
 
     applyResponsiveColumnWidths(
         passwordResetTable,
-        new double[] {0.06, 0.17, 0.34, 0.22, 0.21},
+        new double[] {0.06, 0.14, 0.28, 0.24, 0.28},
         prIdCol,
         prUsernameCol,
         prEmailCol,
@@ -579,7 +581,7 @@ public class AdminPanelController implements Navigable {
     prUsernameCol.setMinWidth(120);
     prEmailCol.setMinWidth(230);
     prTimeCol.setMinWidth(150);
-    prActionCol.setMinWidth(190);
+    prActionCol.setMinWidth(220);
   }
 
   @SafeVarargs
@@ -1588,8 +1590,12 @@ public class AdminPanelController implements Navigable {
 
               {
                 box.setAlignment(javafx.geometry.Pos.CENTER);
+                box.setMaxWidth(Double.MAX_VALUE);
+                box.prefWidthProperty().bind(Bindings.max(0, widthProperty().subtract(24)));
                 approveBtn.getStyleClass().add("approve-button");
                 rejectBtn.getStyleClass().add("reject-button");
+                approveBtn.setMinWidth(Region.USE_PREF_SIZE);
+                rejectBtn.setMinWidth(Region.USE_PREF_SIZE);
                 approveBtn.setOnAction(
                     e ->
                         runRowAction(

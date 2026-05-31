@@ -238,7 +238,7 @@ public class AuctionListController implements Navigable {
                 })
             .toList();
 
-    auctionTable.setItems(FXCollections.observableArrayList(AuctionDisplayOrder.sort(filtered)));
+    updateAuctionTableItems(AuctionDisplayOrder.sort(filtered));
   }
 
   /** Tải lại danh sách phiên từ server và reset bộ lọc theo kết quả mới. */
@@ -997,7 +997,6 @@ public class AuctionListController implements Navigable {
               }
 
               private void redraw() {
-                clearTooltip();
                 AuctionResponse a = auctionForCell(this);
                 if (a == null) {
                   clearCell();
@@ -1005,6 +1004,7 @@ public class AuctionListController implements Navigable {
                 }
                 String st = computeClientStatus(a);
                 if ("FINISHED".equals(st) || "CANCELED".equals(st) || "PAID".equals(st)) {
+                  syncTooltip(null);
                   render(
                       "Ended",
                       "-fx-alignment: CENTER; -fx-text-fill: #64748B; -fx-font-weight: bold;");
@@ -1023,11 +1023,13 @@ public class AuctionListController implements Navigable {
                   // chiều cao.
                   LocalDateTime startTime = a.getStartTime();
                   if (startTime == null) {
+                    syncTooltip(null);
                     render("—", activeStyle);
                     return;
                   }
                   long ms = java.time.Duration.between(now, startTime).toMillis();
                   if (ms <= 0) {
+                    syncTooltip(null);
                     render("Starting soon", activeStyle);
                   } else {
                     long totalSec = ms / 1000;
@@ -1036,13 +1038,15 @@ public class AuctionListController implements Navigable {
                     long s = totalSec % 60;
                     String timeStr = String.format("%02d:%02d:%02d", h, m, s);
                     render(timeStr, activeStyle);
-                    startsInTooltip.setText("Starts in: " + timeStr);
-                    if (getTooltip() != startsInTooltip) {
-                      setTooltip(startsInTooltip);
+                    String tooltipText = "Starts in: " + timeStr;
+                    if (!java.util.Objects.equals(startsInTooltip.getText(), tooltipText)) {
+                      startsInTooltip.setText(tooltipText);
                     }
+                    syncTooltip(startsInTooltip);
                   }
                 } else {
                   // RUNNING: hien thi thoi gian den khi ket thuc
+                  syncTooltip(null);
                   LocalDateTime endTime = a.getEndTime();
                   if (endTime == null) {
                     render("—", activeStyle);
@@ -1064,7 +1068,6 @@ public class AuctionListController implements Navigable {
               }
 
               private void render(String text, String style) {
-                setTextFill(null);
                 if (!java.util.Objects.equals(getText(), text)) {
                   setText(text);
                 }
@@ -1074,17 +1077,18 @@ public class AuctionListController implements Navigable {
               }
 
               private void clearCell() {
-                setText(null);
-                setTextFill(null);
-                clearTooltip();
+                if (getText() != null) {
+                  setText(null);
+                }
+                syncTooltip(null);
                 if (!"-fx-alignment: CENTER;".equals(getStyle())) {
                   setStyle("-fx-alignment: CENTER;");
                 }
               }
 
-              private void clearTooltip() {
-                if (getTooltip() != null) {
-                  setTooltip(null);
+              private void syncTooltip(javafx.scene.control.Tooltip tooltip) {
+                if (getTooltip() != tooltip) {
+                  setTooltip(tooltip);
                 }
               }
             });
@@ -1177,12 +1181,52 @@ public class AuctionListController implements Navigable {
   }
 
   private AuctionResponse auctionForCell(TableCell<?, ?> cell) {
-    int index = cell.getIndex();
-    TableView<?> table = cell.getTableView();
-    if (table == null || index < 0 || index >= table.getItems().size()) {
-      return null;
+    if (cell.getTableRow() != null && cell.getTableRow().getItem() instanceof AuctionResponse row) {
+      return row;
     }
-    return (AuctionResponse) table.getItems().get(index);
+    return null;
+  }
+
+  private void updateAuctionTableItems(List<AuctionResponse> auctions) {
+    ObservableList<AuctionResponse> current = auctionTable.getItems();
+    if (current == null) {
+      auctionTable.setItems(FXCollections.observableArrayList(auctions));
+      return;
+    }
+
+    int sharedSize = Math.min(current.size(), auctions.size());
+    for (int i = 0; i < sharedSize; i++) {
+      AuctionResponse replacement = auctions.get(i);
+      if (!sameDisplayedAuction(current.get(i), replacement)) {
+        current.set(i, replacement);
+      }
+    }
+    if (current.size() > auctions.size()) {
+      current.remove(auctions.size(), current.size());
+    } else if (current.size() < auctions.size()) {
+      current.addAll(auctions.subList(current.size(), auctions.size()));
+    }
+  }
+
+  private boolean sameDisplayedAuction(AuctionResponse left, AuctionResponse right) {
+    return java.util.Objects.equals(left.getId(), right.getId())
+        && java.util.Objects.equals(left.getItemId(), right.getItemId())
+        && java.util.Objects.equals(left.getSellerId(), right.getSellerId())
+        && java.util.Objects.equals(left.getItemName(), right.getItemName())
+        && java.util.Objects.equals(left.getItemCategory(), right.getItemCategory())
+        && java.util.Objects.equals(left.getItemDescription(), right.getItemDescription())
+        && java.util.Objects.equals(left.getItemBrand(), right.getItemBrand())
+        && java.util.Objects.equals(left.getItemArtist(), right.getItemArtist())
+        && java.util.Objects.equals(left.getItemYear(), right.getItemYear())
+        && java.util.Objects.equals(left.getStartingPrice(), right.getStartingPrice())
+        && java.util.Objects.equals(left.getCurrentPrice(), right.getCurrentPrice())
+        && java.util.Objects.equals(left.getLeadingBidderId(), right.getLeadingBidderId())
+        && java.util.Objects.equals(
+            left.getLeadingBidderUsername(), right.getLeadingBidderUsername())
+        && java.util.Objects.equals(left.getStartTime(), right.getStartTime())
+        && java.util.Objects.equals(left.getEndTime(), right.getEndTime())
+        && java.util.Objects.equals(left.getCreatedAt(), right.getCreatedAt())
+        && java.util.Objects.equals(left.getStatus(), right.getStatus());
   }
 
   private boolean canCurrentSellerCancel(AuctionResponse auction) {

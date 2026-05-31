@@ -1185,11 +1185,6 @@
     -fx-padding: 0 0 0 8;
 }
 
-.window-title-sheen {
-    -fx-background-color: linear-gradient(to right, rgba(255,255,255,0.00), rgba(66,165,245,0.22), rgba(255,255,255,0.42), rgba(245,158,11,0.18), rgba(255,255,255,0.00));
-    -fx-background-radius: 16;
-}
-
 .window-title-led-base {
     -fx-background-color: linear-gradient(to right, rgba(21,101,192,0.80), rgba(66,165,245,0.90), rgba(245,158,11,0.72), rgba(21,101,192,0.80));
     -fx-background-radius: 99;
@@ -1402,8 +1397,8 @@
 
 /*
    Header band is a vertical gradient from deeper navy to primary blue + a hairline white
-   highlight at the very top, giving the bar subtle dimension. The filler/menu corners on the
-   right reuse the same gradient so the rounded top-right corner stays continuous.
+   highlight at the very top, giving the bar subtle dimension. The filler/menu regions stay
+   transparent so this single background owns both rounded corners symmetrically.
 */
 .auction-table .column-header-background {
     -fx-background-color:
@@ -1414,16 +1409,21 @@
 }
 
 .auction-table .column-header-background .filler,
+.auction-table:constrained-resize .filler,
 .auction-table .filler {
-    -fx-background-color: linear-gradient(to bottom, #0D47A1 0%, #1565C0 100%);
+    /* Let the rounded header background remain visible through the trailing filler.
+       Painting another rounded gradient here creates a darker blue patch at the right edge. */
+    -fx-background-color: transparent;
     -fx-background-insets: 0;
-    -fx-background-radius: 0 14 0 0;
+    -fx-background-radius: 0;
+    -fx-padding: 0;
 }
 
-.auction-table .show-hide-columns-button {
-    -fx-background-color: linear-gradient(to bottom, #0D47A1 0%, #1565C0 100%);
+.auction-table > .column-header-background > .show-hide-columns-button {
+    -fx-background-color: transparent;
     -fx-background-insets: 0;
-    -fx-background-radius: 0 14 0 0;
+    -fx-background-radius: 0;
+    -fx-padding: 0;
 }
 
 .auction-table .column-header {

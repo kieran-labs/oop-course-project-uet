@@ -110,10 +110,10 @@
             <TableView fx:id="passwordResetTable" prefHeight="180.0" styleClass="auction-table">
                <columns>
                   <TableColumn fx:id="prIdCol" text="ID" prefWidth="60.0" />
-                  <TableColumn fx:id="prUsernameCol" text="Username" prefWidth="150.0" />
-                  <TableColumn fx:id="prEmailCol" text="Email" prefWidth="300.0" />
+                  <TableColumn fx:id="prUsernameCol" text="Username" prefWidth="135.0" />
+                  <TableColumn fx:id="prEmailCol" text="Email" prefWidth="270.0" />
                   <TableColumn fx:id="prTimeCol" text="Requested" prefWidth="180.0" />
-                  <TableColumn fx:id="prActionCol" text="Actions" prefWidth="220.0" minWidth="190.0" />
+                  <TableColumn fx:id="prActionCol" text="Actions" prefWidth="240.0" minWidth="220.0" />
                </columns>
                <placeholder>
                   <Label styleClass="empty-state-label" text="No pending password reset requests." />

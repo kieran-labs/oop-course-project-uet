@@ -220,7 +220,6 @@ public class SceneManager {
 
   private Button maximizeButton;
   private ParallelTransition titleBarIntroTransition;
-  private ParallelTransition titleSheenTransition;
   private TranslateTransition titleLedSweepTransition;
 
   private boolean movingWindow;
@@ -438,31 +437,19 @@ public class SceneManager {
     Region titleLedPulse = createTitleLedPulse();
     StackPane.setAlignment(titleLedPulse, Pos.BOTTOM_LEFT);
 
-    Region titleSheen = new Region();
-    titleSheen.getStyleClass().add("window-title-sheen");
-    titleSheen.setMouseTransparent(true);
-    titleSheen.setMaxSize(180, TITLE_BAR_HEIGHT);
-    StackPane.setAlignment(titleSheen, Pos.TOP_LEFT);
-
-    titleBar.getChildren().addAll(titleContent, titleSheen, titleLedBase, titleLedPulse);
+    titleBar.getChildren().addAll(titleContent, titleLedBase, titleLedPulse);
     rootContainer.getChildren().add(titleBar);
-    installTitleBarAnimations(titleContent, appMark, titleSheen, titleLedBase, titleLedPulse);
+    installTitleBarAnimations(titleContent, appMark, titleLedBase, titleLedPulse);
   }
 
   private void installTitleBarAnimations(
-      HBox titleContent,
-      Region appMark,
-      Region titleSheen,
-      Region titleLedBase,
-      Node titleLedPulse) {
+      HBox titleContent, Region appMark, Region titleLedBase, Node titleLedPulse) {
     titleBar.setOpacity(0);
     titleBar.setTranslateY(-4);
     titleContent.setOpacity(0);
     titleContent.setTranslateX(-7);
     appMark.setScaleX(0.82);
     appMark.setScaleY(0.82);
-    titleSheen.setOpacity(0);
-    titleSheen.setTranslateX(-190);
     titleLedBase.setOpacity(0);
     titleLedPulse.setOpacity(0);
     titleLedPulse.setTranslateX(-260);
@@ -494,18 +481,13 @@ public class SceneManager {
 
     titleBarIntroTransition =
         new ParallelTransition(fadeIn, slideIn, contentFade, contentSlide, markPop, ledBaseFade);
-    titleBarIntroTransition.setOnFinished(
-        event -> {
-          playTitleSheen(titleSheen, 285, 460);
-          startTitleLedSweep(titleLedPulse);
-        });
+    titleBarIntroTransition.setOnFinished(event -> startTitleLedSweep(titleLedPulse));
     titleBarIntroTransition.play();
 
     titleBar.setOnMouseEntered(
         event -> {
           animateTitleLedBase(titleLedBase, 0.95, 150);
           animateTitleLed(titleLedPulse, 1.0, 1.05, 150);
-          playTitleSheen(titleSheen, 300, 360);
         });
     titleBar.setOnMouseExited(
         event -> {
@@ -547,30 +529,6 @@ public class SceneManager {
     titleLedSweepTransition.setCycleCount(javafx.animation.Animation.INDEFINITE);
     titleLedSweepTransition.setInterpolator(Interpolator.LINEAR);
     titleLedSweepTransition.play();
-  }
-
-  private void playTitleSheen(Region titleSheen, double travelX, int durationMillis) {
-    if (titleSheenTransition != null) {
-      titleSheenTransition.stop();
-    }
-    titleSheen.setTranslateX(-190);
-    titleSheen.setOpacity(0);
-
-    TranslateTransition sweep =
-        new TranslateTransition(Duration.millis(durationMillis), titleSheen);
-    sweep.setToX(travelX);
-    sweep.setInterpolator(Interpolator.EASE_OUT);
-
-    FadeTransition glow = new FadeTransition(Duration.millis(durationMillis), titleSheen);
-    glow.setFromValue(0);
-    glow.setToValue(0.82);
-    glow.setAutoReverse(true);
-    glow.setCycleCount(2);
-    glow.setInterpolator(Interpolator.EASE_BOTH);
-
-    titleSheenTransition = new ParallelTransition(sweep, glow);
-    titleSheenTransition.setOnFinished(event -> titleSheen.setOpacity(0));
-    titleSheenTransition.play();
   }
 
   private void animateTitleLedBase(Region titleLedBase, double opacity, int durationMillis) {
